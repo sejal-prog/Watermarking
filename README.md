@@ -164,6 +164,6 @@ If you find this repository useful, please consider giving a star :star: and ple
 @article{fernandez2024video,
   title={Video Seal: Open and Efficient Video Watermarking},
   author={Fernandez, Pierre and Elsahar, Hady and Yalniz, I. Zeki and Mourachko, Alexandre},
-  journal={arXiv preprint arXiv:ARXIV_LINK},
+  journal={arXiv preprint arXiv:2412.09492},
   year={2024}
 }
