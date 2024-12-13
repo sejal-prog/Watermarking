@@ -8,7 +8,7 @@ This repository includes pre-trained models, training code, inference code, and 
 -->
 
 [[`paper`](https://ai.meta.com/research/publications/video-seal-open-and-efficient-video-watermarking/)]
-[[`arXiv`](https://arxiv.org/abs/ARXIV_LINK)]
+[[`arXiv`](https://arxiv.org/abs/2412.09492)]
 [[`Colab`](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/notebooks/colab.ipynb)]
 [[`Demo`](https://aidemos.meta.com/videoseal)]
 
@@ -164,6 +164,6 @@ If you find this repository useful, please consider giving a star :star: and ple
 @article{fernandez2024video,
   title={Video Seal: Open and Efficient Video Watermarking},
   author={Fernandez, Pierre and Elsahar, Hady and Yalniz, I. Zeki and Mourachko, Alexandre},
-  journal={arXiv preprint arXiv:ARXIV_LINK},
+  journal={arXiv preprint arXiv:2412.09492},
   year={2024}
 }
