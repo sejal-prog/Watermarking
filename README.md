@@ -8,7 +8,7 @@ This repository includes pre-trained models, training code, inference code, and 
 -->
 
 [[`paper`](https://ai.meta.com/research/publications/video-seal-open-and-efficient-video-watermarking/)]
-[[`arXiv`](https://arxiv.org/abs/ARXIV_LINK)]
+[[`arXiv`](https://arxiv.org/abs/2412.09492)]
 [[`Colab`](https://colab.research.google.com/github/facebookresearch/videoseal/blob/main/notebooks/colab.ipynb)]
 [[`Demo`](https://aidemos.meta.com/videoseal)]
 
