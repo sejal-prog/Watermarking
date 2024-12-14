@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 # This source code is licensed under the license found in the
-# LICENSE file in the sav_dataset directory of this source tree.
+# LICENSE file in the root directory of this source tree.
 
 # Mostly copy paste from https://github.com/EndlessSora/focal-frequency-loss/blob/master/focal_frequency_loss/focal_frequency_loss.py
 
