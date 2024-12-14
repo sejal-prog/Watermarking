@@ -181,7 +181,7 @@ def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
     if Path(config.checkpoint_path).is_file():
         ckpt_path = Path(config.checkpoint_path)
 
-    elif str(config.checkpoint_path).startswith("https://huggingface.co/facebook/videoseal/"):
+    elif str(config.checkpoint_path).startswith("https://huggingface.co/facebook/video_seal/"):
         # Extract the filename from the URL
         import os
         checkpoint_url = str(config.checkpoint_path)

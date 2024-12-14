@@ -1,4 +1,4 @@
-checkpoint_path: https://huggingface.co/facebook/videoseal/checkpoint.pth
+checkpoint_path: https://huggingface.co/facebook/video_seal/checkpoint.pth
 args:
   image_dataset: sa-1b-500k-resized
   video_dataset: sa-v
