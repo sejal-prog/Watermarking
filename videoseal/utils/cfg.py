@@ -204,7 +204,7 @@ def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
         
         # Download the checkpoint
         ckpt_path = hf_hub_download(
-            repo_id="facebook/videoseal",  # The repository ID
+            repo_id="facebook/video_seal",  # The repository ID
             filename=fname  # Dynamically determined filename
         )
         
