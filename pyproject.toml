@@ -38,7 +38,7 @@ dependencies = [
     "tqdm",
     "timm",
     "scipy",
-    "ffmpeg"
+    "ffmpeg-python",
 ]
 
 [project.optional-dependencies]

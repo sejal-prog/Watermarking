@@ -25,4 +25,4 @@ opencv-python
 tqdm
 timm
 scipy
-ffmpeg
+ffmpeg-python
