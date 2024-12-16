@@ -25,7 +25,6 @@ dependencies = [
     "av",
     "pyav",
     "scikit-image",
-    "decord",
     "pandas",
     "tqdm",
     "pytorch_msssim",
