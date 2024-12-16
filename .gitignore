@@ -6,6 +6,8 @@ core
 core*
 *egg-info
 *.pth
+*.pt
+ckpts/
 
 
 fb_expes/*
