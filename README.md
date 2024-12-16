@@ -127,7 +127,7 @@ python -m videoseal.evals.full \
 or, to run a given baseline:
 ```bash
 python -m videoseal.evals.full \
-    --checkpoint baselines/wam \
+    --checkpoint baseline/wam \
 ``` 
 
 
