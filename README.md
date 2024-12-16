@@ -62,6 +62,13 @@ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.o
 pip install -e . 
 ```
 
+For training, we also recommend using decord:
+```
+pip install decord
+```
+Note that there are some issues with installing decord: https://github.com/dmlc/decord/issues/213
+Everything should be working without decord for inference, but there may be issues for training in this case.
+
 ### Download the Video Seal model
 
 The video model is automatically downloaded through Hugging Face by doing `videoseal.load("videoseal")`.
