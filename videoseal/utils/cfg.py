@@ -19,7 +19,7 @@ from videoseal.augmentation import get_validation_augs
 from videoseal.augmentation.augmenter import get_dummy_augmenter
 from videoseal.data.datasets import (CocoImageIDWrapper, ImageFolder,
                                      VideoDataset)
-from videoseal.models import Videoseal, build_embedder, build_extractor
+from videoseal.models import Videoseal, build_embedder, build_extractor, build_baseline
 from videoseal.modules.jnd import JND
 from videoseal.utils.data import Modalities, parse_dataset_params
 
@@ -128,19 +128,25 @@ def setup_model(config: VideosealConfig, ckpt_path: Path) -> Videoseal:
 
     return wam
 
-
-def setup_model_from_checkpoint(ckpt_path: Path) -> Videoseal:
+def setup_model_from_checkpoint(ckpt_path: str) -> Videoseal:
     """
-    Set up a Video Seal model from a checkpoint file.
+    # Example usage
+    ckpt_path = '/path/to/videoseal/checkpoint.pth'
+    wam = setup_model_from_checkpoint(ckpt_path)
 
-    Args:
-    ckpt_path (Path): Path to the checkpoint file.
-
-    Returns:
-    Videoseal: Loaded model.
+    or 
+    ckpt_path = 'baseline/wam'
+    wam = setup_model_from_checkpoint(ckpt_path)
     """
-    config = get_config_from_checkpoint(ckpt_path)
-    return setup_model(config, ckpt_path)
+    # load baselines. Should be in the format of "baseline/{method}"
+    if "baseline" in ckpt_path:
+        method = ckpt_path.split('/')[-1]
+        return build_baseline(method)
+    # load videoseal checkpoints
+    else:
+        config = get_config_from_checkpoint(ckpt_path)
+        return setup_model(config, ckpt_path)
+
 
 def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
     """

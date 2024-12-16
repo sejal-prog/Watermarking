@@ -334,46 +334,46 @@ def build_baseline(
     ) -> Videoseal:
     if method == 'hidden':
         scaling_w = 0.2
-        encoder_path = '/path/to/hidden_encoder_48b.pt'
-        decoder_path = '/path/to/hidden_decoder_48b.pt'
+        encoder_path = 'ckpts/hidden_encoder_48b.pt'
+        decoder_path = 'ckpts/hidden_decoder_48b.pt'
         embedder = BaselineHiddenEmbedder(encoder_path)
         extractor = BaselineHiddenExtractor(decoder_path)
     elif method == 'mbrs':
         scaling_w = 1.0
-        encoder_path = '/path/to/mbrs_256_m256_encoder.pt'
-        decoder_path = '/path/to/mbrs_256_m256_decoder.pt'
+        encoder_path = 'ckpts/mbrs_256_m256_encoder.pt'
+        decoder_path = 'ckpts/mbrs_256_m256_decoder.pt'
         embedder = BaselineMBRSEmbedder(encoder_path)
         extractor = BaselineMBRSExtractor(decoder_path)
     elif method == 'cin':
         scaling_w = 1.0
         img_size = 128
-        encoder_path = '/path/to/cin_nsm_encoder.pt'
-        decoder_path = '/path/to/cin_nsm_decoder.pt'
+        encoder_path = 'ckpts/cin_nsm_encoder.pt'
+        decoder_path = 'ckpts/cin_nsm_decoder.pt'
         embedder = BaselineCINEmbedder(encoder_path)
         extractor = BaselineCINExtractor(decoder_path)
     elif method == 'wam':
         scaling_w = 2.0
         attenuation = JND(in_channels=1, out_channels=3, blue=True)
-        encoder_path = '/path/to/wam_encoder.pt'
-        decoder_path = '/path/to/wam_decoder.pt'
+        encoder_path = 'ckpts/wam_encoder.pt'
+        decoder_path = 'ckpts/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'wam_noattenuation':
         scaling_w = 0.01
-        encoder_path = '/path/to/wam_encoder.pt'
-        decoder_path = '/path/to/wam_decoder.pt'
+        encoder_path = 'ckpts/wam_encoder.pt'
+        decoder_path = 'ckpts/wam_decoder.pt'
         embedder = BaselineWAMEmbedder(encoder_path)
         extractor = BaselineWAMExtractor(decoder_path)
     elif method == 'trustmark':
         scaling_w = 0.95  # set to 0.95 in the repo of TrustMark's authors
-        encoder_path = '/path/to/trustmark_encoder_q.pt'
-        decoder_path = '/path/to/trustmark_decoder_q.pt'
+        encoder_path = 'ckpts/trustmark_encoder_q.pt'
+        decoder_path = 'ckpts/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     elif method == 'trustmark_scaling0p5':
         scaling_w = 0.5
-        encoder_path = '/path/to/trustmark_encoder_q.pt'
-        decoder_path = '/path/to/trustmark_decoder_q.pt'
+        encoder_path = 'ckpts/trustmark_encoder_q.pt'
+        decoder_path = 'ckpts/trustmark_decoder_q.pt'
         embedder = BaselineTrustmarkEmbedder(encoder_path)
         extractor = BaselineTrustmarkExtractor(decoder_path)
     else:

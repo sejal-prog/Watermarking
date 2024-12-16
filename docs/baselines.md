@@ -39,3 +39,12 @@ You will need to replace some code in the original repositories to save the mode
 ## From the community
 
 [https://huggingface.co/tangtianzhong/img-wm-torchscript](https://huggingface.co/tangtianzhong/img-wm-torchscript)
+
+To download the baselines, you can use the following code:
+```bash
+pip install huggingface_hub
+huggingface-cli download tangtianzhong/img-wm-torchscript --cache-dir .cache
+mkdir ckpts
+mv .cache/models--tangtianzhong--img-wm-torchscript/snapshots/845dc751783db2a03a4b14ea600b0a4a9aba89aa/*.pt ckpts/
+rm -rf .cache
+```
