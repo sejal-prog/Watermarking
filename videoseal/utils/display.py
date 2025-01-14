@@ -101,8 +101,9 @@ def save_video_audio_to_mp4(video_tensor: torch.Tensor, audio_tensor: torch.Tens
     for i in range(T):
         # Clamp the values and convert to numpy
         frame_filename = os.path.join(temp_dir, f"frame_{i:04d}.png")
-        frame = (video_tensor[i].clamp(0,1) * 255).byte().cpu().numpy()  # Convert to uint8 (image format)
-        cv2.imwrite(frame_filename, frame)  # Save frame as PNG
+        frame = (video_tensor[i].clamp(0,1) * 255).byte().cpu().numpy()  # [H, W, C] in RGB
+        frame = frame[:, :, [2, 1, 0]]  # Convert RGB to BGR
+        cv2.imwrite(frame_filename, frame)  # Save to PNG
 
     # Save the audio tensor to a temporary WAV file
     temp_audio_file = tempfile.mktemp(suffix=".wav")
