@@ -128,7 +128,7 @@ def save_video_audio_to_mp4(video_tensor: torch.Tensor, audio_tensor: torch.Tens
         '-pix_fmt', 'rgb24',
         '-y', 'video.mp4'
     ]
-    subprocess.run(video_command, check=True)
+    subprocess.run(video_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Use FFmpeg to add audio to the video
     final_command = [
@@ -140,7 +140,7 @@ def save_video_audio_to_mp4(video_tensor: torch.Tensor, audio_tensor: torch.Tens
         '-strict', 'experimental',
         '-y', output_filename
     ]
-    subprocess.run(final_command, check=True)
+    subprocess.run(final_command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Clean up temporary files
     shutil.rmtree(temp_dir)

@@ -112,7 +112,7 @@ def main(args):
 
         # Save the watermarked video and audio
         save_video_audio_to_mp4(
-            video_tensor=video,
+            video_tensor=video_w,
             audio_tensor=audio_w,
             fps=int(fps),
             audio_sample_rate=int(sample_rate),
