@@ -12,11 +12,7 @@ python -m videoseal.evals.full \
 
 import argparse
 import os
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict
 
-import numpy as np
 import omegaconf
 import pandas as pd
 import torch
@@ -36,7 +32,7 @@ from .metrics import accuracy, bit_accuracy, iou, vmaf_on_tensor
 
 @torch.no_grad()
 def evaluate(
-    videoseal_model: Videoseal,
+    model: Videoseal,
     dataset: Dataset, 
     is_video: bool,
     output_dir: str,
@@ -49,7 +45,7 @@ def evaluate(
     """
     Gives detailed evaluation metrics for a model on a given dataset.
     Args:
-        videoseal_model (Videoseal): The model to evaluate
+        model (Videoseal): The model to evaluate
         dataset (Dataset): The dataset to evaluate on
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
@@ -83,7 +79,7 @@ def evaluate(
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
             timer.start()
-            outputs = videoseal_model.embed(imgs, is_video=is_video)
+            outputs = model.embed(imgs, is_video=is_video)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -160,7 +156,7 @@ def evaluate(
 
                         # extract watermark
                         timer.start()
-                        outputs = videoseal_model.detect(imgs_aug, is_video=is_video)
+                        outputs = model.detect(imgs_aug, is_video=is_video)
                         timer.step()
                         preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
@@ -211,14 +207,14 @@ def main():
     group.add_argument('--short_edge_size', type=int, default=-1, 
                        help='Resizes the short edge of the image to this size at loading time, and keep the aspect ratio. If -1, no resizing.')
     group.add_argument('--num_frames', type=int, default=24*3, 
-                       help='Number of frames to evaluate for video quality')
+                       help='Number of frames to evaluate on')
     group.add_argument('--num_samples', type=int, default=100, 
                           help='Number of samples to evaluate')
     
     group = parser.add_argument_group('Model parameters to override. If not provided, the checkpoint values are used.')
     group.add_argument("--attenuation_config", type=str, default="configs/attenuation.yaml",
        help="Path to the attenuation config file")
-    group.add_argument("--attenuation", type=str, default="None",
+    group.add_argument("--attenuation", type=str, default=None,
                         help="Attenuation model to use")
     group.add_argument("--scaling_w", type=float, default=None,
                         help="Scaling factor for the watermark in the embedder model")
@@ -228,9 +224,9 @@ def main():
                         help='The number of frames to propagate the watermark to')
 
     group = parser.add_argument_group('Experiment')
-    group.add_argument("--output_dir", type=str, default="output/", help="Output directory for logs and images (Default: /output)")
+    group.add_argument("--output_dir", type=str, default="outputs", help="Output directory for logs and images (Default: /output)")
     group.add_argument('--save_first', type=int, default=-1, help='Number of images/videos to save')
-    group.add_argument('--bdrate', type=bool_inst, default=True, help='Whether to compute BD-rate')
+    group.add_argument('--bdrate', type=bool_inst, default=False, help='Whether to compute BD-rate')
     group.add_argument('--decoding', type=bool_inst, default=True, help='Whether to evaluate decoding metrics')
     group.add_argument('--detection', type=bool_inst, default=False, help='Whether to evaluate detection metrics')
 
@@ -241,7 +237,7 @@ def main():
     model.eval()
     
     # Override model parameters in args
-    model.scaling_w = args.scaling_w or model.scaling_w
+    model.blender.scaling_w = args.scaling_w or model.blender.scaling_w
     model.chunk_size = args.videoseal_chunk_size or model.chunk_size
     model.step_size = args.videoseal_step_size or model.step_size
 
@@ -251,13 +247,14 @@ def main():
     model.to(device)
 
     # Override attenuation build
-    # should be on CPU to operate on high resolution videos
-    if args.attenuation.lower() != "none":
-        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
-        attenuation = JND(**attenuation_cfg[args.attenuation])
-    else:
-        attenuation = None
-    model.attenuation = attenuation
+    if args.attenuation is not None:
+        # should be on CPU to operate on high resolution videos
+        if args.attenuation.lower() != "none":
+            attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
+            attenuation = JND(**attenuation_cfg[args.attenuation])
+        else:
+            attenuation = None
+        model.attenuation = attenuation
 
     # Setup the dataset    
     dataset = setup_dataset(args)
@@ -266,7 +263,7 @@ def main():
     # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
     metrics = evaluate(
-        videoseal_model = model, 
+        model = model, 
         dataset = dataset, 
         is_video = args.is_video,
         output_dir = args.output_dir,

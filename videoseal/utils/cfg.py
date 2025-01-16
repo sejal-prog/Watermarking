@@ -8,7 +8,6 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
 
 import omegaconf
 import torch
@@ -139,7 +138,10 @@ def setup_model_from_checkpoint(ckpt_path: str) -> Videoseal:
     if "baseline" in ckpt_path:
         method = ckpt_path.split('/')[-1]
         return build_baseline(method)
-    # load videoseal checkpoints
+    # load videoseal model card
+    elif ckpt_path.startswith('videoseal'):
+        return setup_model_from_model_card(ckpt_path)
+    # load from checkpoint
     else:
         config = get_config_from_checkpoint(ckpt_path)
         return setup_model(config, ckpt_path)
