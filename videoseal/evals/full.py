@@ -10,7 +10,6 @@ python -m videoseal.evals.full \
     --dataset sa-v --is_video true --num_samples 1 \
 """
 
-
 import argparse
 import os
 from dataclasses import dataclass
@@ -25,17 +24,15 @@ import tqdm
 from torch.utils.data import Dataset, Subset
 from torchvision.utils import save_image
 
-from videoseal.utils.cfg import (get_validation_augs, setup_dataset,
-                                 setup_model_from_checkpoint)
-
 from ..evals.metrics import bd_rate, psnr, ssim
+from ..augmentation import get_validation_augs
 from ..models import Videoseal
 from ..modules.jnd import JND
 from ..utils import Timer, bool_inst
 from ..utils.display import save_vid
 from ..utils.image import create_diff_img
+from ..utils.cfg import setup_dataset, setup_model_from_checkpoint
 from .metrics import accuracy, bit_accuracy, iou, vmaf_on_tensor
-
 
 @torch.no_grad()
 def evaluate(
