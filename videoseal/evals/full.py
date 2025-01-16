@@ -36,7 +36,7 @@ from .metrics import accuracy, bit_accuracy, iou, vmaf_on_tensor
 
 @torch.no_grad()
 def evaluate(
-    videoseal: Videoseal,
+    videoseal_model: Videoseal,
     dataset: Dataset, 
     is_video: bool,
     output_dir: str,
@@ -49,7 +49,7 @@ def evaluate(
     """
     Gives detailed evaluation metrics for a model on a given dataset.
     Args:
-        videoseal (Videoseal): The model to evaluate
+        videoseal_model (Videoseal): The model to evaluate
         dataset (Dataset): The dataset to evaluate on
         is_video (bool): Whether the data is video
         output_dir (str): Directory to save the output images
@@ -83,7 +83,7 @@ def evaluate(
             # forward embedder, at any resolution
             # does cpu -> gpu -> cpu when gpu is available
             timer.start()
-            outputs = videoseal.embed(imgs, is_video=is_video)
+            outputs = videoseal_model.embed(imgs, is_video=is_video)
             metrics['embed_time'] = timer.end()
             msgs = outputs["msgs"]  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
@@ -160,7 +160,7 @@ def evaluate(
 
                         # extract watermark
                         timer.start()
-                        outputs = videoseal.detect(imgs_aug, is_video=is_video)
+                        outputs = videoseal_model.detect(imgs_aug, is_video=is_video)
                         timer.step()
                         preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
@@ -266,7 +266,7 @@ def main():
     # evaluate the model, quality and extraction metrics
     os.makedirs(args.output_dir, exist_ok=True)
     metrics = evaluate(
-        videoseal = model, 
+        videoseal_model = model, 
         dataset = dataset, 
         is_video = args.is_video,
         output_dir = args.output_dir,
