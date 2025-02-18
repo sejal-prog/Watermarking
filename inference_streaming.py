@@ -61,7 +61,7 @@ def embed_video(
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
     )
-    
+
     # Create a random message
     msgs = model.get_random_msg()
     with open(output_path.replace(".mp4", ".txt"), "w") as f:
@@ -166,7 +166,31 @@ def main(args):
     print(f"Binary message extracted with {bit_acc:.1f}% bit accuracy")
 
     if args.do_audio:
+        # Placeholder to do audio watermarking as well
         pass
+    else:
+        # Copy just the audio from the original video
+        temp_output = args.output + ".tmp"
+        os.rename(args.output, temp_output)
+        
+        audiostream = ffmpeg.input(args.input)
+        videostream = ffmpeg.input(temp_output)
+        process3 = (
+            ffmpeg
+            .output(
+                videostream.video,
+                audiostream.audio,
+                args.output,
+                vcodec='copy',
+                acodec='copy'
+            )
+            .overwrite_output()
+            .run_async(pipe_stderr=subprocess.PIPE)
+        )
+        process3.wait()
+        os.remove(temp_output)
+        print("Copied audio from the original video")
+        
 
 
 if __name__ == "__main__":
