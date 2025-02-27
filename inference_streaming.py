@@ -53,11 +53,11 @@ def embed_video(
         .output('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height), r=fps)
         .run_async(pipe_stdout=True, pipe_stderr=subprocess.PIPE)
     )
-    # Open the output video
+    # Open the output video with optimal thread usage.
     process2 = (
         ffmpeg
         .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height), r=fps)
-        .output(output_path, vcodec='libx264', pix_fmt='yuv420p', r=fps, crf=crf)
+        .output(output_path, vcodec='libx264', pix_fmt='yuv420p', r=fps)
         .overwrite_output()
         .run_async(pipe_stdin=True, pipe_stderr=subprocess.PIPE)
     )
@@ -191,7 +191,6 @@ def main(args):
         os.remove(temp_output)
         print("Copied audio from the original video")
         
-
 
 if __name__ == "__main__":
     
