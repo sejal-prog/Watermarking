@@ -60,7 +60,7 @@ def main(args):
 
         # Perform watermark embedding on video
         with torch.no_grad():
-            outputs = video_model.embed(video, is_video=True)
+            outputs = video_model.embed(video, is_video=True, lowres_attenuation=True)
 
         # Extract the results
         video_w = outputs["imgs_w"]  # Watermarked video frames

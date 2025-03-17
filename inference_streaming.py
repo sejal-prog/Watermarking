@@ -20,44 +20,13 @@ from videoseal.models import Videoseal
 from videoseal.evals.metrics import bit_accuracy
 
 
-# def check_and_add_ffmpeg():
-#     try:
-#         # Try multiple possible ffmpeg paths
-#         ffmpeg_paths = [
-#             'ffmpeg',
-#             '/opt/homebrew/bin/ffmpeg',
-#             '/usr/local/bin/ffmpeg'
-#         ]
-        
-#         for path in ffmpeg_paths:
-#             try:
-#                 subprocess.run([path, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-#                 print(f"ffmpeg found at: {path}")
-#                 if os.path.dirname(path) not in os.environ['PATH']:
-#                     print(f"Adding {os.path.dirname(path)} to PATH")
-#                     os.environ['PATH'] = os.path.dirname(path) + ':' + os.environ.get('PATH', '')
-#                 return
-#             except FileNotFoundError:
-#                 continue
-                
-#         raise FileNotFoundError("No ffmpeg installation found")
-#     except Exception as e:
-#         raise RuntimeError(f"ffmpeg check failed: {str(e)}")
-
-# IS_H2 = os.path.exists("/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg")
-# if IS_H2:  # add path to the ffmpeg binary from Pierre's home
-#     os.environ['PATH'] = os.path.dirname("/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg") + ':' + os.environ.get('PATH', '')
-# else:
-#     check_and_add_ffmpeg()  # add path to the ffmpeg binary, from Mac homebrew or system
-
-
 def embed_video_clip(
     model: Videoseal,
     clip: np.ndarray,
     msgs: torch.Tensor
 ) -> np.ndarray:
     clip_tensor = torch.tensor(clip, dtype=torch.float32).permute(0, 3, 1, 2) / 255.0
-    outputs = model.embed(clip_tensor, msgs=msgs, is_video=True)
+    outputs = model.embed(clip_tensor, msgs=msgs, is_video=True, lowres_attenuation=True)
     processed_clip = outputs["imgs_w"]
     processed_clip = (processed_clip * 255.0).byte().permute(0, 2, 3, 1).numpy()
     return processed_clip
