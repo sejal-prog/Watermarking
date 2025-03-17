@@ -33,7 +33,7 @@ video = video.float() / 255.0
 model = videoseal.load("videoseal")
 
 # Video watermarking
-outputs = model.embed(video, is_video=True) # this will embed a random msg
+outputs = model.embed(video, is_video=True, lowres_attenuation=True) # this will embed a random msg
 video_w = outputs["imgs_w"] # the watermarked video
 msgs = outputs["msgs"] # the embedded message
 

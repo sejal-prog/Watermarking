@@ -103,7 +103,7 @@ class SpeedTester:
             for _ in range(warmup_runs):
                 outputs = model.embed(imgs, is_video=is_video, interpolation=interpolation, lowres_attenuation=lowres_attenuation)
                 if is_video:
-                    _ = model.detect_and_aggregate(outputs["imgs_w"], video_aggregation, interpolation)
+                    _ = model.extract_message(outputs["imgs_w"], video_aggregation, interpolation)
                 else:
                     _ = model.detect(outputs["imgs_w"], is_video=False)
             
@@ -126,7 +126,7 @@ class SpeedTester:
                 start_time = time.time()
                 
                 if is_video:
-                    _ = model.detect_and_aggregate(imgs_w, video_aggregation, interpolation)
+                    _ = model.extract_message(imgs_w, video_aggregation, interpolation)
                 else:
                     _ = model.detect(imgs_w, is_video=False)
                 

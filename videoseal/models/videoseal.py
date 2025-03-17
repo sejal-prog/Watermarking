@@ -387,7 +387,7 @@ class Videoseal(Wam):
         }
         return outputs
 
-    def detect_and_aggregate(
+    def extract_message(
         self,
         imgs: torch.Tensor,
         aggregation: str = "avg",

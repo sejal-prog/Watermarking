@@ -203,7 +203,7 @@ def evaluate(
                         # extract watermark
                         timer.start()
                         if is_video:
-                            preds = model.detect_and_aggregate(imgs_aug, video_aggregation, interpolation)  # 1 k
+                            preds = model.extract_message(imgs_aug, video_aggregation, interpolation)  # 1 k
                             preds = torch.cat([torch.ones(preds.size(0), 1).to(preds.device), preds], dim=1)  # 1 1+k
                             outputs = {"preds": preds}
                             msgs = msgs[:1]  # 1 k
