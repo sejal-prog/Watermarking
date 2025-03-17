@@ -75,7 +75,7 @@ Everything should be working without decord for inference, but there may be issu
 
 #### Quick Model Loading
 ```python
-# Automatically downloads and loads the default model (128-bit version)
+# Automatically downloads and loads the default model (256-bit version)
 model = videoseal.load("videoseal")
 ```
 
