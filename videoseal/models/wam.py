@@ -1,8 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 """
 Test with:
     python -m videoseal.models.wam
@@ -21,6 +16,11 @@ from .extractor import Extractor
 
 
 class Wam(nn.Module):
+
+    @property
+    def device(self):
+        """Return the device of the model."""
+        return next(self.parameters()).device
 
     def __init__(
         self,
@@ -70,6 +70,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         masks: torch.Tensor,
         msgs: torch.Tensor = None,
+        interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
     ) -> dict:
         """
         Does the full forward pass of the WAM model (used for training).
@@ -81,12 +82,26 @@ class Wam(nn.Module):
         if msgs is None:
             msgs = self.get_random_msg(imgs.shape[0])  # b x k
             msgs = msgs.to(imgs.device)
+
+        # interpolate
+        imgs_res = imgs.clone()
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            imgs_res = F.interpolate(imgs, size=(self.img_size, self.img_size),
+                                     **interpolation)
+
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            preds_w = self.embedder(self.rgb2yuv(imgs)[:, 0:1], msgs)
+            preds_w = self.embedder(self.rgb2yuv(imgs_res)[:, 0:1], msgs)
         else:
-            preds_w = self.embedder(imgs, msgs)
+            preds_w = self.embedder(imgs_res, msgs)
+
+        # interpolate back
+        if imgs.shape[-2:] != (self.img_size, self.img_size):
+            preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
+                                    **interpolation)
+        preds_w = preds_w.to(imgs.device)
         imgs_w = self.blender(imgs, preds_w)
+
         # apply attenuation and clamp
         if self.attenuation is not None:
             self.attenuation.to(imgs.device)
@@ -95,7 +110,13 @@ class Wam(nn.Module):
             imgs_w = torch.clamp(imgs_w, 0, 1)
         # augment
         imgs_aug, masks, selected_aug = self.augmenter(
-            imgs_w, imgs, masks, is_video=False)
+            imgs_w, imgs, masks, is_video=False, do_resize=False)
+
+        # interpolate back
+        if imgs_aug.shape[-2:] != (self.img_size, self.img_size):
+            imgs_aug = F.interpolate(imgs_aug, size=(self.img_size, self.img_size),
+                                        **interpolation)
+            
         # detect watermark
         preds = self.detector(imgs_aug)
         # create and return outputs
@@ -115,6 +136,7 @@ class Wam(nn.Module):
         imgs: torch.Tensor,
         msgs: torch.Tensor = None,
         interpolation: dict = {"mode": "bilinear", "align_corners": False, "antialias": True},
+        lowres_attenuation: bool = False,
     ) -> dict:
         """
         Generates watermarked images from the input images and messages (used for inference).
@@ -122,6 +144,9 @@ class Wam(nn.Module):
         Args:
             imgs (torch.Tensor): Batched images with shape BxCxHxW.
             msgs (torch.Tensor): Optional messages with shape BxK.
+            interpolation (dict): Interpolation parameters.
+            lowres_attenuation (bool): Whether to attenuate the watermark at low resolution,
+                which is more memory efficient for high-resolution images.
         Returns:
             dict: A dictionary with the following keys:
                 - msgs (torch.Tensor): Original messages with shape BxK.
@@ -141,21 +166,33 @@ class Wam(nn.Module):
 
         # generate watermarked images
         if self.embedder.yuv:  # take y channel only
-            imgs_res = self.rgb2yuv(imgs_res)[:, 0:1]
-        preds_w = self.embedder(
-            imgs_res, msgs.to(self.device))
+            preds_w = self.embedder(
+                self.rgb2yuv(imgs_res)[:, 0:1],
+                msgs.to(self.device)
+            )
+        else:
+            preds_w = self.embedder(imgs_res, msgs.to(self.device))
+
+        # attenuate at low resolution if needed
+        if self.attenuation is not None and lowres_attenuation:
+            self.attenuation.to(imgs_res.device)
+            hmaps = self.attenuation.heatmaps(imgs_res)
+            preds_w = hmaps * preds_w
 
         # interpolate back
         if imgs.shape[-2:] != (self.img_size, self.img_size):
             preds_w = F.interpolate(preds_w, size=imgs.shape[-2:],
                                     **interpolation)
         preds_w = preds_w.to(imgs.device)
-        imgs_w = self.blender(imgs, preds_w)
-
-        # apply attenuation and clamp
-        if self.attenuation is not None:
+        
+        # apply attenuation
+        if self.attenuation is not None and not lowres_attenuation:
             self.attenuation.to(imgs.device)
-            imgs_w = self.attenuation(imgs, imgs_w)
+            hmaps = self.attenuation.heatmaps(imgs)
+            preds_w = hmaps * preds_w
+
+        # blend and clamp
+        imgs_w = self.blender(imgs, preds_w)
         if self.clamp:
             imgs_w = torch.clamp(imgs_w, 0, 1)
 
@@ -195,25 +232,6 @@ class Wam(nn.Module):
             "preds": preds,  # predicted masks and/or messages: b (1+nbits) h w
         }
         return outputs
-
-    
-    @property
-    def device(self):
-        """Return the device of the model."""
-        return next(self.parameters()).device
-
-    def freeze_module(self, module_name):
-        """
-        This function allows doing sleep awake style training between embedder and 
-        detector "model.freeze_module('embedder')"
-        """
-        for param in getattr(self, module_name).parameters():
-            param.requires_grad = False
-
-    def unfreeze_module(self, module_name):
-        "model.unfreeze_module('embedder')"
-        for param in getattr(self, module_name).parameters():
-            param.requires_grad = True
 
 
 if __name__ == "__main__":

@@ -11,12 +11,11 @@ from ..modules.jnd import JND
 
 
 class JNDLoss(nn.Module):
-    def __init__(self, 
-        preprocess = lambda x: x,
+    def __init__(self,
         loss_type = 0
     ):
         super(JNDLoss, self).__init__()
-        self.jnd = JND(preprocess)
+        self.jnd = JND()
         self.mse = nn.MSELoss()
         self.loss_type = loss_type
     

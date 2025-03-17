@@ -28,3 +28,9 @@ ffmpeg -version
 ffmpeg -filters | grep vmaf
 ```
 It should output the path to the ffmpeg binary, the version of ffmpeg and the vmaf filter.
+
+
+## H2
+
+Path to ffmpeg binary: `/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`.
+To load the good binary, run  `export PATH=$PATH:/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg`

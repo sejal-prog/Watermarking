@@ -1,11 +1,7 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-
 import torch
 import torch.nn as nn
 from lpips import LPIPS
+
 
 from .watson_fft import ColorWrapper, WatsonDistanceFft
 from .watson_vgg import WatsonDistanceVgg
@@ -15,6 +11,11 @@ from .focal import FocalFrequencyLoss
 from .ssim import SSIM, MSSSIM
 from .yuvloss import YUVLoss
 
+loss_weights_paths = {
+    "dists": "/path/to/loss_weights/dists_ckpt.pth",
+    "watson_vgg": "/path/to/loss_weights/rgb_watson_vgg_trial0.pth",
+    "watson_dft": "/path/to/loss_weights/rgb_watson_fft_trial0.pth",
+}
 
 def build_loss(loss_name):
     if loss_name == "none":
@@ -37,19 +38,19 @@ def build_loss(loss_name):
         return JNDLoss(loss_type=2)
     elif loss_name == "dists":
         # See https://github.com/dingkeyan93/DISTS/blob/master/DISTS_pytorch for the weights
-        return DISTS("/path/to/dists_ckpt.pth").eval()
+        return DISTS(loss_weights_paths["dists"]).eval()
     elif loss_name == "watson_vgg":
         # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
         model = WatsonDistanceVgg(reduction="none")
-        ckpt_loss = "/path/to/rgb_watson_vgg_trial0.pth"
+        ckpt_loss = loss_weights_paths["watson_vgg"]
         model.load_state_dict(torch.load(ckpt_loss))
-        return model
+        return model.eval()
     elif loss_name == "watson_dft":
         # See https://github.com/SteffenCzolbe/PerceptualSimilarity for the weights
         model = ColorWrapper(WatsonDistanceFft, (), {"reduction": "none"})
-        ckpt_loss = "/path/to/rgb_watson_fft_trial0.pth"
+        ckpt_loss = loss_weights_paths["watson_dft"]
         model.load_state_dict(torch.load(ckpt_loss))
-        return model
+        return model.eval()
     else:
         raise ValueError(f"Loss type {loss_name} not supported.")
     

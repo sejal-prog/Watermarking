@@ -1,6 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -27,18 +26,31 @@ class Identity(nn.Module):
 
 
 class Rotate(nn.Module):
-    def __init__(self, min_angle=None, max_angle=None):
+    def __init__(self, min_angle=None, max_angle=None, do90=False):
         super(Rotate, self).__init__()
         self.min_angle = min_angle
         self.max_angle = max_angle
+        if do90:
+            self.base_angles = torch.tensor([-90, 0, 0, 90])
+        else:
+            self.base_angles = torch.tensor([0])
 
     def get_random_angle(self):
         if self.min_angle is None or self.max_angle is None:
             raise ValueError("min_angle and max_angle must be provided")
-        return torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
+        base_angle = self.base_angles[
+            torch.randint(0, len(self.base_angles), size=(1,))
+        ].item()
+        return base_angle + torch.randint(self.min_angle, self.max_angle + 1, size=(1,)).item()
 
     def forward(self, image, mask=None, angle=None):
         angle = angle or self.get_random_angle()
+        base_angle = angle // 90 * 90
+        angle = angle - base_angle
+        # rotate base_angle first with expand=True to avoid cropping
+        image = F.rotate(image, base_angle, expand=True)
+        mask = F.rotate(mask, base_angle, expand=True) if mask is not None else mask
+        # rotate the rest with expand=False
         image = F.rotate(image, angle)
         mask = F.rotate(mask, angle) if mask is not None else mask
         return image, mask
@@ -201,10 +213,12 @@ if __name__ == "__main__":
         (HorizontalFlip, [])             # No parameters needed for flip
     ]
 
-    # Create a batch of images
-    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
-    imgs = transforms.ToTensor()(img).unsqueeze(0)
-    imgs_w = imgs.clone()
+    # Load images
+    imgs = [
+        Image.open("/private/home/pfz/_images/gauguin_256.png"),
+        Image.open("/private/home/pfz/_images/tahiti_256.png")
+    ]
+    imgs = torch.stack([ToTensor()(img) for img in imgs])
 
     # Create the output directory
     output_dir = "outputs"
@@ -225,10 +239,8 @@ if __name__ == "__main__":
                        os.path.join(output_dir, filename))
 
             # Print the path to the saved image
-            print(
-                f"Saved transformed images ({transform.__name__}, strength={strength}) to:", 
-                os.path.join(output_dir, filename)
-            )
+            print(f"Saved transformed images ({transform.__name__}, strength={strength}) to:", os.path.join(
+                output_dir, filename))
 
         # Handle no strength transformations
         if not strengths:
@@ -244,7 +256,5 @@ if __name__ == "__main__":
                        os.path.join(output_dir, filename))
 
             # Print the path to the saved image
-            print(
-                f"Saved transformed images ({transform.__name__}) to:", 
-                os.path.join(output_dir, filename)
-            )
+            print(f"Saved transformed images ({transform.__name__}) to:", os.path.join(
+                output_dir, filename))

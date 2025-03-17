@@ -1,6 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -9,13 +8,15 @@ Test with:
     python -m videoseal.augmentation.valuemetric
 """
 
+import io
+
 import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
+from PIL import Image
 
 from ..utils.image import jpeg_compress, median_filter
-
 
 class JPEG(nn.Module):
     def __init__(self, min_quality=None, max_quality=None, passthrough=True):
@@ -172,6 +173,44 @@ class Hue(nn.Module):
     def __repr__(self):
         return f"Hue"
 
+class GaussianNoise(nn.Module):
+    def __init__(self, min_std=None, max_std=None):
+        super(GaussianNoise, self).__init__()
+        self.min_std = min_std
+        self.max_std = max_std
+
+    def get_random_std(self):
+        if self.min_std is None or self.max_std is None:
+            raise ValueError("Standard deviation range must be specified")
+        return torch.rand(1).item() * (self.max_std - self.min_std) + self.min_std
+
+    def forward(self, image, mask, std=None):
+        std = self.get_random_std() if std is None else std
+        noise = torch.randn_like(image) * std
+        image = image + noise
+        return image, mask
+
+    def __repr__(self):
+        return f"GaussianNoise"
+
+
+class Grayscale(nn.Module):
+    def __init__(self):
+        super(Grayscale, self).__init__()
+        
+    def forward(self, image, mask, *args, **kwargs):
+        """
+        Convert image to grayscale. The strength parameter is ignored.
+        """
+        # Convert to grayscale using the ITU-R BT.601 standard (luma component)
+        # Y = 0.299 R + 0.587 G + 0.114 B
+        grayscale = 0.299 * image[:, 0:1] + 0.587 * image[:, 1:2] + 0.114 * image[:, 2:3]
+        grayscale = grayscale.expand_as(image)
+        return grayscale, mask
+
+    def __repr__(self):
+        return f"Grayscale"
+
 
 if __name__ == "__main__":
     import os
@@ -181,21 +220,28 @@ if __name__ == "__main__":
     from torchvision.transforms import ToTensor
     from torchvision.utils import save_image
 
-    # Define the transformations and their parameters
+    from ..data.transforms import default_transform
+
+    # Define the transformations and their parameter ranges
     transformations = [
         (Brightness, [0.5, 1.5]),
         (Contrast, [0.5, 1.5]),
         (Saturation, [0.5, 1.5]),
-        (Hue, [0.1, 0.2, 0.3]),
-        (JPEG, [40, 80]),
-        (GaussianBlur, [9, 17]),
-        (MedianFilter, [9, 17]),
+        (Hue, [-0.5, -0.25, 0.25, 0.5]),
+        (JPEG, [40, 60, 80]),
+        (GaussianBlur, [3, 5, 9, 17]),
+        (MedianFilter, [3, 5, 9, 17]),
+        (GaussianNoise, [0.05, 0.1, 0.15, 0.2]),
+        (Grayscale, [-1]),  # Grayscale doesn't need a strength parameter
+        # (bmshj2018, [2, 4, 6, 8])
     ]
 
-    # Create a batch of images
-    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
-    imgs = transforms.ToTensor()(img).unsqueeze(0)
-    imgs_w = imgs.clone()
+    # Load images
+    imgs = [
+        Image.open("/private/home/pfz/_images/gauguin_256.png"),
+        Image.open("/private/home/pfz/_images/tahiti_256.png")
+    ]
+    imgs = torch.stack([default_transform(img) for img in imgs])
 
     # Create the output directory
     output_dir = "outputs"
@@ -208,34 +254,12 @@ if __name__ == "__main__":
             transform_instance = transform()
 
             # Apply the transformation to the images
-            imgs_transformed, _ = transform_instance(imgs, imgs, strength)
+            imgs_transformed, _ = transform_instance(imgs, None, strength)
 
             # Save the transformed images
             filename = f"{transform.__name__}_strength_{strength}.png"
-            save_image(imgs_transformed.clamp(0, 1),
-                       os.path.join(output_dir, filename))
+            save_image(imgs_transformed.clamp(0, 1), os.path.join(output_dir, filename))
 
             # Print the path to the saved image
-            print(
-                f"Saved transformed images ({transform.__name__}, strength={strength}) to:", 
-                os.path.join(output_dir, filename)
-            )
-
-        # Handle no strength transformations
-        if not strengths:
-            # Create an instance of the transformation
-            transform_instance = transform()
-
-            # Apply the transformation to the images
-            imgs_transformed, _ = transform_instance(imgs, imgs)
-
-            # Save the transformed images
-            filename = f"{transform.__name__}.png"
-            save_image(imgs_transformed.clamp(0, 1),
-                       os.path.join(output_dir, filename))
-
-            # Print the path to the saved image
-            print(
-                f"Saved transformed images ({transform.__name__}) to:", 
-                os.path.join(output_dir, filename)
-            )
+            print(f"Saved transformed images ({transform.__name__}, strength={strength}) to:", os.path.join(
+                output_dir, filename))

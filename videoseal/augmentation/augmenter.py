@@ -1,6 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -12,12 +11,17 @@ Test with:
 import os
 
 import torch
+from PIL import Image
 from torch import nn
+from torchvision.utils import save_image
 
-from .geometric import Crop, HorizontalFlip, Identity, Perspective, Resize, Rotate
-from .valuemetric import JPEG, Brightness, Contrast, GaussianBlur, Hue, MedianFilter, Saturation
-from .video import VideoCompressorAugmenter, H264
+from ..data.transforms import default_transform
+from .geometric import (Crop, HorizontalFlip, Identity, Perspective, Resize,
+                        Rotate)
 from .masks import get_mask_embedder
+from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
+                          MedianFilter, Saturation)
+from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
 
 name2aug = {
     'rotate': Rotate,
@@ -35,12 +39,18 @@ name2aug = {
     'hue': Hue,
     'video_compression': VideoCompressorAugmenter,
     'h264': H264,
+    'h264rgb': H264rgb,
+    'h265': H265,
+    'drop_frame': DropFrame
 }
+video_augs = ['video_compression', 'h264', 'h264rgb', 'h265']
+
 
 def get_dummy_augmenter():
     """
     An augmenter that does nothing.
     """
+    
     return Augmenter(
         augs = {'identity': 1},
         augs_params = {},
@@ -69,13 +79,13 @@ class Augmenter(nn.Module):
             augs_params: (dict) The parameters for each augmentation. \
                 E.g. {'resize': {'min_size': 0.7, 'max_size': 1.5}, 'crop': {'min_size': 0.7, 'max_size': 1.0}}
             num_augs: (int) The number of augmentations to apply.
-            **kwargs: (dict) Additional arguments for the mask embedder.
+            **kwargs: (dict) Additional arguments.
         """
         super(Augmenter, self).__init__()
 
-        # create mask embedder, not used by default
+        # create mask embedder
         self.mask_embedder = get_mask_embedder(
-            **masks  # contains: kind, invert_proba, etc.
+            **masks  # contains, e.g., invert_proba
         )
 
         # create augs
@@ -83,12 +93,18 @@ class Augmenter(nn.Module):
             augs=augs,
             augs_params=augs_params
         )
+        self.augs_video, self.aug_probs_video = self.parse_augmentations(
+            augs=augs,
+            augs_params=augs_params,
+            is_video=True
+        )
         self.num_augs = num_augs
 
     def parse_augmentations(
         self,
         augs: dict[str, float],
         augs_params: dict[str, dict[str, float]],
+        is_video: bool = False
     ):
         """
         Parse the post augmentations into a list of augmentations.
@@ -102,9 +118,10 @@ class Augmenter(nn.Module):
         probs = []
         # parse each augmentation
         for aug_name in augs.keys():
+            if aug_name in video_augs and not is_video:
+                continue
             aug_prob = float(augs[aug_name])
-            aug_params = augs_params[aug_name] if aug_name in augs_params else {
-            }
+            aug_params = augs_params[aug_name] if aug_name in augs_params else {}
             try:
                 selected_aug = name2aug[aug_name](**aug_params)
             except KeyError:
@@ -117,12 +134,10 @@ class Augmenter(nn.Module):
         probs = [prob / total_prob for prob in probs]
         return augmentations, torch.tensor(probs)
 
-    def augment(self, image, mask=None, is_video=False, do_resize=True):
-        if not is_video:  # replace video compression with identity
-            augs = [aug if aug.__class__.__name__ != 'VideoCompressorAugmenter' else Identity() for aug in self.augs]
-        else:
-            augs = self.augs
-        index = torch.multinomial(self.aug_probs, 1).item()
+    def augment(self, image, mask, is_video, do_resize=True):
+        augs = self.augs_video if is_video else self.augs
+        aug_probs = self.aug_probs_video if is_video else self.aug_probs
+        index = torch.multinomial(aug_probs, 1).item()
         selected_aug = augs[index]
         if not do_resize:
             image, mask = selected_aug(image, mask)
@@ -140,8 +155,9 @@ class Augmenter(nn.Module):
         self,
         imgs_w: torch.Tensor,
         imgs: torch.Tensor,
-        masks: torch.Tensor = None,
-        is_video=True
+        masks: torch.Tensor,
+        is_video=True,
+        do_resize=True
     ) -> torch.Tensor:
         """
         Args:
@@ -162,7 +178,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video, do_resize=False)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             selected_aug = "+".join(selected_augs)
             return imgs_aug, mask_targets, selected_aug
@@ -173,7 +189,7 @@ class Augmenter(nn.Module):
             selected_augs = []
             for _ in range(self.num_augs):
                 imgs_aug, mask_targets, selected_aug_ = self.augment(
-                    imgs_aug, mask_targets, is_video, do_resize=False)
+                    imgs_aug, mask_targets, is_video, do_resize)
                 selected_augs.append(selected_aug_)
             return imgs_aug, mask_targets, selected_aug
 
@@ -184,11 +200,6 @@ class Augmenter(nn.Module):
 
 
 if __name__ == "__main__":
-
-    from PIL import Image
-    from torchvision import transforms
-    from torchvision.utils import save_image
-
     # Define the augmentations and their parameters
     augs = {
         'identity': 1,
@@ -196,7 +207,6 @@ if __name__ == "__main__":
         'resize': 1,
         'crop': 1,
         'perspective': 1,
-        'hue': 1,
         'jpeg': 1,
         'gaussian_blur': 1,
         'median_filter': 1,
@@ -205,31 +215,35 @@ if __name__ == "__main__":
         'resize': {'min_size': 0.7, 'max_size': 1.5},
         'crop': {'min_size': 0.5, 'max_size': 0.7},
         'rotate': {'min_angle': -10, 'max_angle': 10},
-        'perspective': {'min_distortion_scale': 0.1, 'max_distortion_scale': 0.5},
+        'perspective': {'distortion_scale': 0.5},
         'jpeg': {'min_quality': 40, 'max_quality': 80},
-        'hue': {'min_factor': -0.5, 'max_factor': 0.5},
         'gaussian_blur': {'min_kernel_size': 3, 'max_kernel_size': 17},
         'median_filter': {'min_kernel_size': 3, 'max_kernel_size': 9},
     }
 
     # Create a batch of images
-    img = Image.open(f"assets/imgs/1.jpg").convert("RGB")
-    imgs = transforms.ToTensor()(img).unsqueeze(0)
+    imgs = [
+        Image.open(f"/private/home/pfz/_images/gauguin_256.png"),
+        Image.open(f"/private/home/pfz/_images/tahiti_256.png")
+    ]
+    imgs = torch.stack([default_transform(img) for img in imgs])
     imgs_w = imgs.clone()
 
     # Create an instance of the Augmenter class
-    masks = {'kind': None}
     augmenter = Augmenter(
-        masks=masks,
         augs=augs,
         augs_params=augs_params,
-        num_augs=2
+        kind='mixed',
+        invert_proba=0.5
     )
     print("Augmenter:", augmenter)
 
     # Apply the augmentations to the images and save
-    output_dir = "outputs/augmentations"
+    output_dir = "outputs"
     os.makedirs(output_dir, exist_ok=True)
     for ii in range(10):
         imgs_aug, mask_targets, selected_aug = augmenter(imgs_w, imgs)
-        save_image(imgs_aug.clamp(0, 1), os.path.join(output_dir, f"imgs_aug_{ii}_{selected_aug}.png"))
+        save_image(imgs_aug.clamp(0, 1),
+                   os.path.join(output_dir, f"imgs_aug_{ii}.png"), nrow=2)
+        save_image(mask_targets, os.path.join(
+            output_dir, f"mask_targets_{ii}.png"), nrow=2)

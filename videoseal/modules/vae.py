@@ -5,14 +5,11 @@
 
 # Mainly adapted from https://github.com/CompVis/taming-transformers/blob/master/taming/modules/diffusionmodules/model.py
 
-import numpy as np
 from einops import rearrange
 
 import torch
 import torch.nn as nn
 
-
-from .common import MLPBlock
 
 
 def nonlinearity(x):

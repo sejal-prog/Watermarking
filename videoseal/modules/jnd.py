@@ -11,12 +11,11 @@ import torch.nn.functional as F
 class JND(nn.Module):
     """ https://ieeexplore.ieee.org/document/7885108 """
     
-    def __init__(self, 
-            preprocess = lambda x: x,
-            postprocess = lambda x: x,
+    def __init__(self,
             in_channels = 1,
             out_channels = 3,
-            blue = False
+            blue = False,
+            apply_mode = "multiply"
     ) -> None:
         super(JND, self).__init__()
 
@@ -58,9 +57,8 @@ class JND(nn.Module):
         self.conv_y.weight = nn.Parameter(kernel_y, requires_grad=False)
         self.conv_lum.weight = nn.Parameter(kernel_lum, requires_grad=False)
 
-        # setup pre and post processing
-        self.preprocess = preprocess
-        self.postprocess = postprocess
+        # setup apply mode
+        self.apply_mode = apply_mode
 
     def jnd_la(self, x, alpha=1.0, eps=1e-5):
         """ Luminance masking: x must be in [0,255] """
@@ -84,7 +82,7 @@ class JND(nn.Module):
         imgs: torch.Tensor, 
         clc: float = 0.3
     ) -> torch.Tensor:
-        """ imgs must be in [0,1] after preprocess """
+        """ imgs must be in [0,1]"""
         imgs = 255 * imgs
         rgbs = torch.tensor([0.299, 0.587, 0.114])
         if self.in_channels == 1:
@@ -109,10 +107,9 @@ class JND(nn.Module):
             hmaps = torch.sum(hmaps / 3, dim=1, keepdim=True)  # b 1 h w
         return hmaps / 255
 
-    def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-        """ imgs and deltas must be in [0,1] after preprocess """
-        imgs = self.preprocess(imgs)
-        imgs_w = self.preprocess(imgs_w)
-        hmaps = self.heatmaps(imgs, clc=0.3)
-        imgs_w = imgs + alpha * hmaps * (imgs_w - imgs)
-        return self.postprocess(imgs_w)
+    def forward(self, imgs: torch.Tensor, imgs_w: torch.Tensor) -> torch.Tensor:
+        """ imgs and deltas must be in [0,1] """
+        hmaps = self.heatmaps(imgs)
+        imgs_w = imgs + hmaps * (imgs_w - imgs)
+        return imgs_w
+

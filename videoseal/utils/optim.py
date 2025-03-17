@@ -3,11 +3,6 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""
-Test with:
-    python -m videoseal.utils.optim
-"""
-
 import os
 import math
 
@@ -15,10 +10,15 @@ import torch
 import timm.optim as optim
 import timm.scheduler as scheduler
 
+from contextlib import contextmanager
+
 
 class ScalingScheduler:
     """
     Set the scaling parameter depending on the epoch.
+    Ex:
+        "Linear,scaling_min=0.05,epochs=100"
+        ScalingScheduler(model, "scaling", "linear", 0.3, 0.05, 100)
     """
     def __init__(
         self, 
@@ -27,14 +27,18 @@ class ScalingScheduler:
         name: str,
         scaling_o: float,
         scaling_min: float,
-        epochs: int
+        epochs: int,
+        start_epoch: int = 0,
+        end_epoch: int = None
     ):
         self.obj = obj
         self.attribute = attribute
         self.name = name.lower()
         self.scaling = scaling_o
         self.scaling_min = scaling_min
-        self.epochs = epochs - 1
+        self.epochs = epochs
+        self.start_epoch = start_epoch
+        self.end_epoch = end_epoch if end_epoch is not None else start_epoch + epochs
     
     @staticmethod
     def linear_scaling(value_o, value_f, epoch, epochs):
@@ -45,17 +49,39 @@ class ScalingScheduler:
         return value_f + 0.5 * (value_o - value_f) * (1 + math.cos(epoch / epochs * math.pi))
 
     def step(self, epoch):
-        if self.name == "none" or self.name == "constant":
+        if epoch < self.start_epoch:
             new_scaling = self.scaling
-        elif self.name == "linear":
-            new_scaling = self.linear_scaling(self.scaling, self.scaling_min, epoch, self.epochs)
-        elif self.name == "cosine":
-            new_scaling = self.cosine_scaling(self.scaling, self.scaling_min, epoch, self.epochs)
+        elif epoch > self.end_epoch:
+            new_scaling = self.scaling_min
         else:
-            raise ValueError(f"Unknown scaling schedule '{self.schedule}'")
+            epoch_in_schedule = epoch - self.start_epoch
+            if self.name == "none" or self.name == "constant":
+                new_scaling = self.scaling
+            elif self.name == "linear":
+                new_scaling = self.linear_scaling(self.scaling, self.scaling_min, epoch_in_schedule, self.epochs)
+            elif self.name == "cosine":
+                new_scaling = self.cosine_scaling(self.scaling, self.scaling_min, epoch_in_schedule, self.epochs)
+            else:
+                raise ValueError(f"Unknown scaling schedule '{self.name}'")
         setattr(self.obj, self.attribute, new_scaling)
         return new_scaling
 
+@contextmanager
+def freeze_grads(model):
+    """
+    Temporarily freezes the parameters of a PyTorch model.
+    Args:
+        model (torch.nn.Module): The model whose parameters will be frozen.
+    """
+    original_requires_grad = {}
+    for param in model.parameters():
+        original_requires_grad[param] = param.requires_grad
+        param.requires_grad = False
+    try:
+        yield
+    finally:
+        for param, requires_grad in original_requires_grad.items():
+            param.requires_grad = requires_grad
 
 def parse_params(s):
     """
@@ -72,8 +98,8 @@ def parse_params(s):
     return params
 
 def build_optimizer(
-    name, 
     model_params, 
+    name, 
     **optim_params
 ) -> torch.optim.Optimizer:
     """ Build optimizer from a dictionary of parameters """
@@ -90,8 +116,8 @@ def build_optimizer(
     raise ValueError(f'Unknown optimizer "{name}", choose among {str(tim_optimizers+torch_optimizers)}')
 
 def build_lr_scheduler(
-    name, 
     optimizer, 
+    name, 
     **lr_scheduler_params
 ) -> torch.optim.lr_scheduler._LRScheduler:
     """ 
@@ -130,7 +156,7 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
     print("Found checkpoint at {}".format(ckp_path))
 
     # open checkpoint file
-    checkpoint = torch.load(ckp_path, map_location="cpu")
+    checkpoint = torch.load(ckp_path, map_location="cpu", weights_only=True)
 
     # key is what to look for in the checkpoint file
     # value is the object to load
@@ -152,6 +178,7 @@ def restart_from_checkpoint(ckp_path, run_variables=None, **kwargs):
                     print("=> failed to load '{}' from checkpoint: '{}'".format(key, ckp_path))
         else:
             print("=> key '{}' not found in checkpoint: '{}'".format(key, ckp_path))
+    print(flush=True)
 
     # re load variable important for the run
     if run_variables is not None:

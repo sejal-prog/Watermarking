@@ -1,17 +1,12 @@
-.DS_Store
 __pycache__
-output
-outputs
+output*
 core
 core*
 *egg-info
 *.pth
-*.pt
-ckpts/
+*.mp4
 
-
-fb_expes/*
-fb_notebooks/*
-*/fb_demo/*
 # Track videos in test directories
 !**/tests/**/*.mp4
+results*
+slurm*

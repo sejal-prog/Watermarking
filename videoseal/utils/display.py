@@ -7,18 +7,15 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Tuple, Union
+from scipy.io.wavfile import write
 
 import cv2
-import numpy as np
+
 import torch
 import torchvision
-import torchvision.io
-from scipy.io.wavfile import write
-from torch import Tensor
 
 
-def save_img(img: Tensor, out_path: str) -> None:
+def save_img(img: torch.Tensor, out_path: str) -> None:
     """
     Saves an image tensor to a file.
 
@@ -44,7 +41,7 @@ def save_img(img: Tensor, out_path: str) -> None:
     img_pil = torchvision.transforms.ToPILImage()(img)
     img_pil.save(out_path)
 
-def save_vid(vid: Tensor, out_path: str, fps: int, crf: int=11) -> None:
+def save_vid(vid: torch.Tensor, out_path: str, fps: int, crf: int=11) -> None:
     """
     Saves a video tensor to a file.
 
@@ -149,12 +146,12 @@ def save_video_audio_to_mp4(video_tensor: torch.Tensor, audio_tensor: torch.Tens
 
     print(f"Video saved to {output_filename}")
 
-def get_fps(video_path: Union[str, os.PathLike]) -> tuple:
+def get_fps(video_path: str|os.PathLike) -> tuple:
     """
     Retrieves the FPS and frame count of a video.
 
     Args:
-    video_path (Union[str, os.PathLike]): Path to the video file.
+    video_path (str|os.PathLike): Path to the video file.
 
     Returns:
     tuple: Contains the FPS (float) and frame count (int).

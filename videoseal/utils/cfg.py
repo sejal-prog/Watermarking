@@ -1,32 +1,42 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 # This source code is licensed under the license found in the
-# MIT_LICENSE file in the root directory of this source tree.
+# LICENSE file in the root directory of this source tree.
 
-import importlib.util
-import json
 import os
+import requests
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 import omegaconf
 import torch
+import torch.distributed as dist
 import torchvision.transforms as transforms
 from omegaconf import DictConfig, OmegaConf
 
+import videoseal.utils.dist as udist
 from videoseal.augmentation.augmenter import get_dummy_augmenter
-from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
+from videoseal.data.datasets import CocoImageIDWrapper, ImageFolder, VideoDataset, SimpleVideoDataset
 from videoseal.models import Videoseal, build_embedder, build_extractor, build_baseline
 from videoseal.modules.jnd import JND
 
-omegaconf.OmegaConf.register_new_resolver("mul", lambda x, y: x * y)
-omegaconf.OmegaConf.register_new_resolver("add", lambda x, y: x + y)
+DEFAULT_CARD = 'videoseal_1.0'
+
 
 @dataclass
 class SubModelConfig:
     """Configuration for a sub-model."""
     model: str
     params: DictConfig
+
+
+@dataclass
+class VideosealConfig:
+    """Configuration for a Video Seal model."""
+    args: DictConfig
+    embedder: SubModelConfig
+    extractor: SubModelConfig
 
 
 @dataclass
@@ -47,16 +57,10 @@ def get_config_from_checkpoint(ckpt_path: Path) -> VideosealConfig:
     Returns:
     VideosealConfig: Loaded configuration.
     """
-    exp_dir, exp_name = os.path.dirname(ckpt_path).rsplit('/', 1)
-    logfile_path = os.path.join(exp_dir, 'logs', exp_name + '.stdout')
+    checkpoint = torch.load(ckpt_path, map_location='cpu', weights_only=True)
+    args = checkpoint['args']
+    args = OmegaConf.create(args)
 
-    with open(logfile_path, 'r') as file:
-        for line in file:
-            if '__log__:' in line:
-                params = json.loads(line.split('__log__:')[1].strip())
-                break
-
-    args = OmegaConf.create(params)
     if not isinstance(args, DictConfig):
         raise Exception("Expected logfile to contain params dictionary.")
 
@@ -90,16 +94,28 @@ def setup_model(config: VideosealConfig, ckpt_path: Path) -> Videoseal:
     """
     args = config.args
 
+    # prepare some args for backward compatibility
+    if "img_size_proc" in args:
+        args.img_size = args.img_size_proc
+    else:
+        args.img_size = args.img_size_extractor
+
+    if "hidden_size_multiplier" in args:
+        args.hidden_size_multiplier = args.hidden_size_multiplier
+    else:
+        args.hidden_size_multiplier = 2
+
     # Build models
-    embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits)
-    extractor = build_extractor(config.extractor.model, config.extractor.params, args.img_size_extractor, args.nbits)
+    embedder = build_embedder(config.embedder.model, config.embedder.params, args.nbits, args.hidden_size_multiplier)
+    extractor = build_extractor(config.extractor.model, config.extractor.params, args.img_size, args.nbits)
     augmenter = get_dummy_augmenter()  # does nothing
 
     # Build attenuation
-    attenuation = None
-    if args.attenuation.lower() != "none":
-        attenuation_cfg = OmegaConf.load(args.attenuation_config)
+    if args.attenuation.lower().startswith("jnd"):
+        attenuation_cfg = omegaconf.OmegaConf.load(args.attenuation_config)
         attenuation = JND(**attenuation_cfg[args.attenuation])
+    else:
+        attenuation = None
 
     # Build the complete model
     wam = Videoseal(
@@ -141,7 +157,7 @@ def setup_model_from_checkpoint(ckpt_path: str) -> Videoseal:
     # load videoseal model card
     elif ckpt_path.startswith('videoseal'):
         return setup_model_from_model_card(ckpt_path)
-    # load from checkpoint
+    # load videoseal ckpts
     else:
         config = get_config_from_checkpoint(ckpt_path)
         return setup_model(config, ckpt_path)
@@ -150,21 +166,14 @@ def setup_model_from_checkpoint(ckpt_path: str) -> Videoseal:
 def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
     """
     Set up a Video Seal model from a model card YAML file.
-
-
     Args:
-    model_card (Path | str): Path to the model card YAML file or name of the model card.
-
-
+        model_card (Path | str): Path to the model card YAML file or name of the model card.
     Returns:
-    Videoseal: Loaded model.
+        Videoseal: Loaded model.
     """
-
-    # Get the path of the videoseal package
-    videoseal_path = Path(importlib.util.find_spec('videoseal').origin).parent
-
-    # Define the cards directory as a subdirectory of the videoseal package
-    cards_dir = videoseal_path / 'cards'
+    cards_dir = Path("videoseal/cards")
+    if model_card == 'videoseal':
+        model_card = DEFAULT_CARD
 
     if isinstance(model_card, str):
         available_cards = [card.stem for card in cards_dir.glob('*.yaml')]
@@ -212,11 +221,49 @@ def setup_model_from_model_card(model_card: Path | str) -> Videoseal:
             repo_id="facebook/video_seal",  # The repository ID
             filename=fname  # Dynamically determined filename
         )
-        
+
+    elif is_url(config.checkpoint_path):
+        if udist.is_dist_avail_and_initialized():
+            # download only on the main process
+            if udist.is_main_process():
+                ckpt_path = maybe_download_checkpoint(config.checkpoint_path)
+            dist.barrier()
+
+        ckpt_path = maybe_download_checkpoint(config.checkpoint_path)
     else:
         raise RuntimeError(f"Path or uri {config.checkpoint_path} is unknown or does not exist")
 
     return setup_model(config, ckpt_path)
+
+
+def is_url(string):
+    try:
+        result = urlparse(string)
+        return all([result.scheme, result.netloc])
+    except ValueError:
+        return False
+
+
+def maybe_download_checkpoint(url):
+    try:
+        basename = urlparse(url).path.split("/")[-1]
+        os.makedirs("ckpts", exist_ok=True)
+        filename = os.path.abspath(os.path.join("ckpts", basename))
+
+        if os.path.exists(filename):
+            print(f"File {filename} exists, skipping download")
+            return filename
+
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        with open(filename, 'wb') as file:
+            file.write(response.content)
+        print(f"File {url} downloaded successfully to {filename}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading file: {e}")
+
+    return filename
+
 
 def setup_dataset(args):
     try:
@@ -224,14 +271,21 @@ def setup_dataset(args):
     except FileNotFoundError:
         raise FileNotFoundError(f"Dataset configuration not found: {args.dataset}")
     if args.is_video:
-        # Video dataset, with optional masks
-        dataset = VideoDataset(
-            folder_paths = [dataset_config.val_dir],
-            transform = None,
-            output_resolution = args.short_edge_size,
-            num_workers = 0,
-            subsample_frames = False,
-        )
+        # Simple video dataset, intended for inference only
+        if hasattr(args, "simple_video_dataset") and args.simple_video_dataset:
+            dataset = SimpleVideoDataset(
+                dataset_config.val_dir,
+                args.short_edge_size
+            )
+        # Video dataset, with optional masks, intended for training
+        else:
+            dataset = VideoDataset(
+                folder_paths = [dataset_config.val_dir],
+                transform = None,
+                output_resolution = args.short_edge_size,
+                num_workers = 0,
+                subsample_frames = False,
+            )
         print(f"Video dataset loaded from {dataset_config.val_dir}")
     else:
         # Image dataset

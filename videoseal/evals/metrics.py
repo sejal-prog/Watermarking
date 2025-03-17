@@ -8,30 +8,30 @@ To run
     python -m videoseal.evals.metrics
 """
 
-import math
 import os
-import re
-import shutil
+import math
 import subprocess
 import tempfile
-
+import re
 import numpy as np
+from scipy import stats, interpolate
+
 import torch
-from pytorch_msssim import ssim as pytorch_ssim
-from scipy import interpolate, stats
+import pytorch_msssim
 
-
-def psnr(x, y):
+def psnr(x, y, is_video=False):
     """ 
     Return PSNR 
     Args:
         x: Image tensor with normalized values (≈ [0,1])
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
+        is_video: If True, the PSNR is computed over the entire batch, not on each image separately
     """
     delta = 255 * (x - y)
     delta = delta.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # BxCxHxW
     peak = 20 * math.log10(255.0)
-    noise = torch.mean(delta**2, dim=(1,2,3))  # B
+    avg_on_dims = (0,1,2,3) if is_video else (1,2,3)
+    noise = torch.mean(delta**2, dim=avg_on_dims)
     psnr = peak - 10*torch.log10(noise)
     return psnr
 
@@ -42,8 +42,27 @@ def ssim(x, y, data_range=1.0):
         x: Image tensor with normalized values (≈ [0,1])
         y: Image tensor with normalized values (≈ [0,1]), ex: original image
     """
-    return pytorch_ssim(x, y, data_range=data_range, size_average=False)
+    return pytorch_msssim.ssim(x, y, data_range=data_range, size_average=False)
 
+def msssim(x, y, data_range=1.0):
+    """
+    Return MSSSIM
+    Args:
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
+    """
+    return pytorch_msssim.ms_ssim(x, y, data_range=data_range, size_average=False)
+
+def linf(x, y, data_range=1.0):
+    """
+    Return L_inf in pixel space (integer between 0 and 255)
+    Args:
+        x: Image tensor with normalized values (≈ [0,1])
+        y: Image tensor with normalized values (≈ [0,1]), ex: original image
+    """
+    multiplier = 255.0 / data_range
+    return torch.max(torch.abs(x - y)) * multiplier
+    
 def iou(preds, targets, threshold=0.0, label=1):
     """
     Return IoU for a specific label (0 or 1).
@@ -158,20 +177,122 @@ def bit_accuracy(
     bit_acc = torch.mean(correct, dim=-1)  # b
     return bit_acc
 
+def bit_accuracy_1msg(
+    preds: torch.Tensor, 
+    targets: torch.Tensor, 
+    masks: torch.Tensor = None,
+    threshold: float = 0.0
+) -> torch.Tensor:
+    """
+    Computes the bit accuracy for each pixel, then averages over all pixels.
+    Better for "k-bit" evaluation during training since it's independent of detection performance.
+    Args:
+        preds (torch.Tensor): Predicted bits with shape BxKxHxW
+        targets (torch.Tensor): Target bits with shape BxK
+        masks (torch.Tensor): Mask with shape Bx1xHxW (optional)
+            Used to compute bit accuracy only on non masked pixels.
+            Bit accuracy will be NaN if all pixels are masked.
+    """
+    preds = preds > threshold  # b k h w
+    targets = targets > 0.5  # b k
+    correct = (preds == targets.unsqueeze(-1).unsqueeze(-1)).float()  # b k h w
+    if masks is not None:  
+        bsz, nbits, h, w = preds.size()
+        masks = masks.expand_as(correct).bool()
+        correct_list = [correct[i].masked_select(masks[i]) for i in range(len(masks))]
+        bit_acc = torch.tensor([torch.mean(correct_list[i]).item() for i in range(len(correct_list))])
+    else:
+        bit_acc = torch.mean(correct, dim=(1,2,3))  # b
+    return bit_acc
+
+def bit_accuracy_inference(
+    preds: torch.Tensor, 
+    targets: torch.Tensor, 
+    masks: torch.Tensor,
+    method: str = 'hard',
+    threshold: float = 0.0
+) -> torch.Tensor:
+    """
+    Computes the message by averaging over all pixels, then computes the bit accuracy.
+    Closer to how the model is evaluated during inference.
+    Args:
+        preds (torch.Tensor): Predicted bits with shape BxKxHxW
+        targets (torch.Tensor): Target bits with shape BxK
+        masks (torch.Tensor): Mask with shape Bx1xHxW
+            Used to compute bit accuracy only on non masked pixels.
+            Bit accuracy will be NaN if all pixels are masked.
+        method (str): Method to compute bit accuracy. Options: 'hard', 'soft'
+    """
+    if method == 'hard':
+        # convert every pixel prediction to binary, select based on masks, and average
+        preds = preds > threshold  # b k h w
+        bsz, nbits, h, w = preds.size()
+        masks = masks > 0.5  # b 1 h w
+        masks = masks.expand_as(preds).bool()
+        # masked select only works if all masks in the batch share the same number of 1s
+        # not the case here, so we need to loop over the batch
+        preds = [pred.masked_select(mask).view(nbits, -1) for mask, pred in zip(masks, preds)]  # b k n
+        preds = [pred.mean(dim=-1, dtype=float) for pred in preds]  # b k
+        preds = torch.stack(preds, dim=0)  # b k
+    elif method == 'semihard':
+        # select every pixel prediction based on masks, and average
+        bsz, nbits, h, w = preds.size()
+        masks = masks > 0.5  # b 1 h w
+        masks = masks.expand_as(preds).bool()
+        # masked select only works if all masks in the batch share the same number of 1s
+        # not the case here, so we need to loop over the batch
+        preds = [pred.masked_select(mask).view(nbits, -1) for mask, pred in zip(masks, preds)]  # b k n
+        preds = [pred.mean(dim=-1, dtype=float) for pred in preds]  # b k
+        preds = torch.stack(preds, dim=0)  # b k
+    elif method == 'soft':
+        # average every pixel prediction, use masks "softly" as weights for averaging
+        bsz, nbits, h, w = preds.size()
+        masks = masks.expand_as(preds)  # b k h w
+        preds = torch.sum(preds * masks, dim=(2,3)) / torch.sum(masks, dim=(2,3))  # b k
+    preds = preds > 0.5  # b k
+    targets = targets > 0.5  # b k
+    correct = (preds == targets).float()  # b k
+    bit_acc = torch.mean(correct, dim=(1))  # b
+    return bit_acc
+
+def bit_accuracy_mv(
+    preds: torch.Tensor, 
+    targets: torch.Tensor, 
+    masks: torch.Tensor = None,
+    threshold: float = 0.0
+) -> torch.Tensor:
+    """
+    (Majority vote)
+    Return bit accuracy
+    Args:
+        preds (torch.Tensor): Predicted bits with shape BxKxHxW
+        targets (torch.Tensor): Target bits with shape BxK
+        masks (torch.Tensor): Mask with shape Bx1xHxW (optional)
+            Used to compute bit accuracy only on non masked pixels.
+            Bit accuracy will be NaN if all pixels are masked.
+    """
+    preds = preds > threshold  # b k h w
+    targets = targets > 0.5  # b k
+    correct = (preds == targets.unsqueeze(-1).unsqueeze(-1)).float()  # b k h w
+    if masks is not None:  
+        bsz, nbits, h, w = preds.size()
+        masks = masks.expand_as(correct).bool()
+        preds = preds.masked_select(masks).view(bsz, nbits, -1)  # b k n
+        # correct = correct.masked_select(masks).view(bsz, nbits, -1)  # b k n
+        # correct = correct.unsqueeze(-1)  # b k n 1
+    # Perform majority vote for each bit
+    preds_majority, _ = torch.mode(preds, dim=-1)  # b k
+    # Compute bit accuracy
+    correct = (preds_majority == targets).float()  # b k
+    # bit_acc = torch.mean(correct, dim=(1,2,3))  # b
+    bit_acc = torch.mean(correct, dim=-1)  # b
+    return bit_acc
+
 def tensor_to_video(
         tensor, filename, fps, 
         codec=None, crf=23,
-        ffmpeg_bin: str = None
+        ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
     ):
-    """
-    Saves a video tensor into a video file.
-    """
-    # Find ffmpeg binary if not provided
-    if ffmpeg_bin is None:
-        ffmpeg_bin = shutil.which('ffmpeg')
-        if ffmpeg_bin is None:
-            raise FileNotFoundError("ffmpeg not found in PATH. Please install ffmpeg or specify the path to ffmpeg_bin.")
-    
     """ Saves a video tensor into a video file."""
     T, C, H, W = tensor.shape
     assert C == 3, "Video must have 3 channels (RGB)."
@@ -204,25 +325,19 @@ def tensor_to_video(
 def vmaf_on_file(
     vid_o: str,
     vid_w: str,
-    ffmpeg_bin: str = None
+    ffmpeg_bin: str = '/private/home/pfz/09-videoseal/vmaf-dev/ffmpeg-git-20240629-amd64-static/ffmpeg',
 ) -> float:
     """
     Runs `ffmpeg -i vid_o.mp4 -i vid_w.mp4 -filter_complex libvmaf` and returns the score.
     """
-    # Find ffmpeg binary if not provided
-    if ffmpeg_bin is None:
-        ffmpeg_bin = shutil.which('ffmpeg')
-        if ffmpeg_bin is None:
-            raise FileNotFoundError("ffmpeg not found in PATH. Please install ffmpeg or specify the path to ffmpeg_bin.")
-
     # Execute the command and capture the output to get the VMAF score
     command = [
-            ffmpeg_bin,
-            '-i', vid_o,
-            '-i', vid_w,
-            '-filter_complex', 'libvmaf',
-            '-f', 'null', '-'
-        ]
+        ffmpeg_bin,
+        '-i', vid_o,
+        '-i', vid_w,
+        '-lavfi', 'libvmaf=\'n_threads=8\'',
+        '-f', 'null', '-'
+    ]
     result = subprocess.run(command, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     vmaf_score = None
     for line in result.stderr.split('\n'):

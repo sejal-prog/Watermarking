@@ -4,10 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import io
+from PIL import Image
 
 import torch
 import torchvision.transforms as transforms
-from PIL import Image
 
 
 def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
@@ -96,9 +96,12 @@ def create_diff_img(img1, img2):
         torch.Tensor: The difference image tensor of shape 3xHxW.
     """
     diff = img1 - img2
+    # diff = 0.5 + 10*(img1 - img2)
     # normalize the difference image
     diff = (diff - diff.min()) / ((diff.max() - diff.min()) + 1e-6)
-    return torch.abs(diff - 0.5)
+    diff = 2*torch.abs(diff - 0.5)
+    # diff = 20*torch.abs(diff)
+    return diff.clamp(0, 1)
 
 
 if __name__ == '__main__':

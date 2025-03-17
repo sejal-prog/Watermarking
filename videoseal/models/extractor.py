@@ -5,10 +5,12 @@
 
 import torch
 from torch import nn
-from videoseal.modules.convnext import ConvNeXtV2
-from videoseal.modules.hidden import HiddenDecoder
-from videoseal.modules.pixel_decoder import PixelDecoder
-from videoseal.modules.vit import ImageEncoderViT
+
+from ..modules.convnext import ConvNeXtV2
+from ..modules.hidden import HiddenDecoder
+from ..modules.pixel_decoder import PixelDecoder
+from ..modules.vit import ImageEncoderViT
+from ..modules.dvmark import DVMarkDecoder
 
 
 class Extractor(nn.Module):
@@ -184,11 +186,13 @@ def build_extractor(name, cfg, img_size, nbits):
         extractor = HiddenExtractor(hidden_decoder)
     elif name.startswith('convnext'):
         # updates some cfg
-        cfg.num_bits = nbits
+        cfg.pixel_decoder.nbits = nbits
         # build the encoder, decoder and msg processor
         convnext = ConvNeXtV2(**cfg.encoder)
         pixel_decoder = PixelDecoder(**cfg.pixel_decoder)
         extractor = ConvnextExtractor(convnext, pixel_decoder)
+    elif name.startswith("dvmark"):
+        extractor = DVMarkDecoder(nbits)
     else:
         raise NotImplementedError(f"Model {name} not implemented")
     return extractor

@@ -1,6 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -9,28 +8,24 @@ import warnings
 
 import torch
 import torch.nn.functional as F
+from decord import VideoReader, cpu
 from torch.utils.data import DataLoader, DistributedSampler
-import torchvision
-
-try:
-    from decord import VideoReader, cpu
-    decord_available = True
-except ImportError:
-    VideoReader = None
-    decord_available = False
 
 from ..utils.dist import is_dist_avail_and_initialized
 from .datasets import CocoImageIDWrapper, ImageFolder, VideoDataset
+from .transforms import default_transform
 
 
-def load_video(fname):
+def load_video(fname, num_workers=8):
     """
-    Load full video.
+    Load full video content using Decord.
     Args:
         fname (str): The path to the video file.
         num_workers (int): The number of worker threads to use for video loading. Defaults to 8.
     Returns:
-        tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W, C) and a mask tensor.
+        tuple: A tuple containing the loaded video frames as a PyTorch tensor (Frames, H, W , C) and a mask tensor.
+    Raises:
+        warnings.warn: If the video file is not found or is too short.
     """
     if not os.path.exists(fname):
         warnings.warn(f'video path not found {fname=}')
@@ -39,20 +34,20 @@ def load_video(fname):
     if _fsize < 1 * 1024:  # avoid hanging issue
         warnings.warn(f'video too short {fname=}')
         return [], None
-    if decord_available:
-        vr = VideoReader(fname, num_threads=8, ctx=cpu(0))
-        vid_np = vr.get_batch(range(len(vr))).asnumpy()
-        vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
-        vid_pt = torch.from_numpy(vid_np).float()
-    else:
-        vid_pt, _, _ = torchvision.io.read_video(fname, output_format="TCHW")
-        vid_pt = vid_pt.float() / 255.0
+    try:
+        vr = VideoReader(
+            fname, num_threads=num_workers, ctx=cpu(0))
+    except Exception:
+        return [], None
+    vid_np = vr.get_batch(range(len(vr))).asnumpy()
+    vid_np = vid_np.transpose(0, 3, 1, 2) / 255.0  # normalize to 0 - 1
+    vid_pt = torch.from_numpy(vid_np).float()
     return vid_pt
 
 
 def get_dataloader(
     data_dir: str,
-    transform: callable = torchvision.transforms.ToTensor(),
+    transform: callable = default_transform,
     batch_size: int = 128,
     shuffle: bool = True,
     num_workers: int = 8

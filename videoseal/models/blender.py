@@ -1,3 +1,8 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -47,10 +52,6 @@ class Blender(nn.Module):
         Returns:
             torch.Tensor: Blended and attenuated image batch.
         """
-        # In case of Y channel only, repeat it to 3 channels (same as embedding only in Y channel)
-        if preds_w.shape[1] == 1:
-            preds_w = preds_w.repeat(1, 3, 1, 1)
-
         # Perform blending
         blend_function = self.blend_methods[self.method]
         blended_output = blend_function(imgs, preds_w)
