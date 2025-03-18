@@ -169,7 +169,8 @@ python -m videoseal.evals.full \
     --checkpoint baseline/wam \
 ``` 
 
-
+This should save a file called `metrics.csv` with image/video imperceptibility metrics and the robustness to each augmentation (you can remove some of them to make the evaluation faster).
+For instance, running the eval script for the default `videoseal` model on high-resolution videos from the SA-V dataset should give metrics similar to [sav_256b_metrics](https://dl.fbaipublicfiles.com/videoseal/sav_256b_metrics.csv).
 
 
 ## Training
