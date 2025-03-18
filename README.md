@@ -83,16 +83,16 @@ model = videoseal.load("videoseal")
 
 - **Default Model (256-bit)**: 
   - Model name: `videoseal_1.0`
-  - Download: [y_256_img.pth](https://dl.fbaipublicfiles.com/videoseal/y_256_img.pth)
+  - Download: [y_256b_img.pth](https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth)
   - Best balance of efficiency and robustness
   - Manual download:
     ```bash
     # For Linux/Windows:
-    wget https://dl.fbaipublicfiles.com/videoseal/y_256_img.pth -P ckpts/
+    wget https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth -P ckpts/
     
     # For Mac:
     mkdir ckpts
-    curl -o ckpts/y_256_img.pth https://dl.fbaipublicfiles.com/videoseal/y_256_img.pth
+    curl -o ckpts/y_256b_img.pth https://dl.fbaipublicfiles.com/videoseal/y_256b_img.pth
     ```
 
 - **Legacy Model (96-bit)**: December 2024 version
@@ -121,8 +121,9 @@ We provide a guide on how to check and install VMAF at [docs/vmaf.md](docs/vmaf.
 
 ### Notebooks
 
-- [`notebooks/demos/video_inference.ipynb`](notebooks/demos/video_inference.ipynb)
-- [`notebooks/demos/video_inference_streaming.ipynb`](notebooks/demos/video_inference_streaming.ipynb): optimized for lower RAM usage
+- [`notebooks/image_inference.ipynb`](notebooks/image_inference.ipynb)
+- [`notebooks/video_inference.ipynb`](notebooks/video_inference.ipynb)
+- [`notebooks/video_inference_streaming.ipynb`](notebooks/video_inference_streaming.ipynb): optimized for lower RAM usage
 
 ### Audio-visual watermarking
 
