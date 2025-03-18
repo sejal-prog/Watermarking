@@ -333,11 +333,11 @@ def build_baseline(
         chunk_size: int = 1,
         step_size: int = 1,
     ) -> Videoseal:
-    assert os.path.exists('ckpts'), """
-        Please download the baseline models first.  
-        See docs/baselines.md for instructions, or run:
-        `pip install huggingface_hub; huggingface-cli download tangtianzhong/img-wm-torchscript --cache-dir .cache; mkdir ckpts; find .cache/models--tangtianzhong--img-wm-torchscript/snapshots/845dc751783db2a03a4b14ea600b0a4a9aba89aa -type l -exec cp --dereference {} ckpts/ \; sleep 5 ;rm -rf .cache`
-    """
+    assert os.path.exists(os.path.join('ckpts', 'hidden_encoder_48b.pt')), """
+Please download the baseline models first.  
+See docs/baselines.md for instructions, or run:
+`pip install huggingface_hub; huggingface-cli download tangtianzhong/img-wm-torchscript --cache-dir .cache; mkdir ckpts; find .cache/models--tangtianzhong--img-wm-torchscript/snapshots/845dc751783db2a03a4b14ea600b0a4a9aba89aa -type l -exec cp --dereference {} ckpts/ \; sleep 5 ;rm -rf .cache`
+"""
     if method == 'hidden':
         scaling_w = 0.2
         encoder_path = 'ckpts/hidden_encoder_48b.pt'
