@@ -19,37 +19,41 @@ This repository includes pre-trained models, training code, inference code, and 
 
 ## Quick start
 
+Here is quick standalone entry point loading the VideoSeal model as a TorchScript:
 ```python
+import os
+from PIL import Image
+import torch
 import torchvision
-import videoseal
-from videoseal.evals.metrics import bit_accuracy
+from torchvision.transforms.functional import to_tensor, to_pil_image
 
-# Load video and normalize to [0, 1]
-video_path = "assets/videos/1.mp4"
-video = torchvision.io.read_video(video_path, output_format="TCHW")
-video = video.float() / 255.0
+# Download the model and load it.
+os.makedirs("ckpts", exist_ok=True)
+if not os.path.exists("ckpts/y_256b_img.jit"):
+    os.system("wget https://dl.fbaipublicfiles.com/videoseal/y_256b_img.jit -P ckpts/")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = torch.jit.load("ckpts/y_256b_img.jit").to(device).eval()
 
-# Load the model
-model = videoseal.load("videoseal")
+# Image watermarking in 3 lines.
+img = to_tensor(Image.open("image.jpg")).unsqueeze(0).to(device)
+msg = torch.randint(0, 2, (1, 256)).float().to(device)
+img_watermarked = model.embed(img, msg)
+# Video watermarking in 3 lines.
+video = torchvision.io.read_video("video.mp4")[0].permute(0, 3, 1, 2)  # TCHW format
+video = (video.float() / 255.0).to(device)[:16]  # First 16 frames
+video_watermarked = model.embed(video, msg, is_video=True)
 
-# Video watermarking
-outputs = model.embed(video, is_video=True, lowres_attenuation=True) # this will embed a random msg
-video_w = outputs["imgs_w"] # the watermarked video
-msgs = outputs["msgs"] # the embedded message
-
-# Extract the watermark message
-msg_extracted = model.extract_message(video_w, aggregation="avg", is_video=True)
-
-# VideoSeal can do image Watermarking
-img = video[0:1] # 1 x C x H x W
-outputs = model.embed(img, is_video=False)
-img_w = outputs["imgs_w"] # the watermarked image
-msg_extracted = model.extract_message(imgs_w, aggregation="avg", is_video=False)
+# Image detection.
+img_watermarked = to_tensor(Image.open("image_watermarked.jpg")).unsqueeze(0).to(device)
+preds = model.detect(img_watermarked)
+# Video detection.
+video_watermarked = torchvision.io.read_video("video_watermarked.mp4")[0].permute(0, 3, 1, 2)
+video_watermarked = (video_watermarked.float() / 255.0).to(device)[:16]
 ```
-
-
+More info on the TorchScript functions and parameters at [docs/torchscript.md](https://github.com/facebookresearch/videoseal/blob/main/docs/torchscript.md).
 
 ## Installation
+
 
 ### Requirements
 
