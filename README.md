@@ -40,7 +40,7 @@ msg = torch.randint(0, 2, (1, 256)).float().to(device)
 img_watermarked = model.embed(img, msg)
 # Video watermarking in 3 lines.
 video = torchvision.io.read_video("video.mp4")[0].permute(0, 3, 1, 2)  # TCHW format
-video = (video.float() / 255.0).to(device)[:16]  # First 16 frames
+video = (video.float() / 255.0).to(device)[:16]  # First 16 frames to avoid OOMs
 video_watermarked = model.embed(video, msg, is_video=True)
 
 # Image detection.
@@ -48,7 +48,8 @@ img_watermarked = to_tensor(Image.open("image_watermarked.jpg")).unsqueeze(0).to
 preds = model.detect(img_watermarked)
 # Video detection.
 video_watermarked = torchvision.io.read_video("video_watermarked.mp4")[0].permute(0, 3, 1, 2)
-video_watermarked = (video_watermarked.float() / 255.0).to(device)[:16]
+video_watermarked = (video_watermarked.float() / 255.0).to(device)
+preds = model.detect(video_watermarked, is_video=True)
 ```
 More info on the TorchScript functions and parameters at [docs/torchscript.md](https://github.com/facebookresearch/videoseal/blob/main/docs/torchscript.md).
 
