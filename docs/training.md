@@ -67,8 +67,8 @@ Here are the final weights with discriminator and optimizer state at the end of 
 
 | Model | Description | Training Checkpoint | Logs |
 |-------|-------------|---------------------|------|
-| 128-bit | Image-trained model with 128 bits | [y_128b_img.pth](https://dl.fbaipublicfiles.com/videoseal/checkpoints/y_128b_img.pth) | [logs](https://dl.fbaipublicfiles.com/videoseal/log_y_128b_img.txt) |
-| 256-bit | Image-trained model with 256 bits | [y_256b_img.pth](https://dl.fbaipublicfiles.com/videoseal/checkpoints/y_256b_img.pth) | [logs](https://dl.fbaipublicfiles.com/videoseal/log_y_256b_img.txt) |
+| 128-bit | Image-trained model with 128 bits | [y_128b_img.pth](https://dl.fbaipublicfiles.com/videoseal/y_128b_img_full.pth) | [logs](https://dl.fbaipublicfiles.com/videoseal/log_y_128b_img.txt) |
+| 256-bit | Image-trained model with 256 bits | [y_256b_img.pth](https://dl.fbaipublicfiles.com/videoseal/y_256b_img_full.pth) | [logs](https://dl.fbaipublicfiles.com/videoseal/log_y_256b_img.txt) |
 
 Note: Inference-only model files (linked in the main README) are smaller versions of these checkpoints with only the necessary weights for inference.
 
