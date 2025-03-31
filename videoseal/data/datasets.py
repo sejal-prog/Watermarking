@@ -43,9 +43,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_image_paths(path):
-    cache_dir = '/large_experiments/omniseal/cache/videoseal'
+    cache_dir = '.cache'
     cache_file = path.replace('/', '_') + '.json'
     cache_file = os.path.join(cache_dir, cache_file)
+
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+    
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             paths = json.load(f)
