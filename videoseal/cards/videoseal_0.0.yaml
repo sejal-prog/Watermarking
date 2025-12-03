@@ -41,8 +41,8 @@ args:
   disc_start: 0
   disc_num_layers: 2
   disc_hinge_on_logits_fake: false
-  batch_size: 16
-  batch_size_eval: 32
+  batch_size: 8 #16
+  batch_size_eval: 16 #32
   batch_size_video: 1
   batch_size_video_eval: 1
   workers: 0

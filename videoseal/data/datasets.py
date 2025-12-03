@@ -549,7 +549,7 @@ class SimpleVideoDataset(Dataset):
 if __name__ == "__main__":
     import time
 
-    dataset = ImageFolder(path="/large_experiments/meres/sa-1b/anonymized_resized/valid/", annotations_folder="/datasets01/segment_anything/annotations/release_040523/")
+    dataset = ImageFolder(path="/home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/sa-1b/val/", annotations_folder=None)
     print(dataset[0][1])
 
 

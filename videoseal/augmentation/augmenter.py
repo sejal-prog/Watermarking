@@ -22,6 +22,9 @@ from .masks import get_mask_embedder
 from .valuemetric import (JPEG, Brightness, Contrast, GaussianBlur, Hue,
                           MedianFilter, Saturation)
 from .video import VideoCompressorAugmenter, DropFrame, H264, H265, H264rgb
+from .geometric import Rotate
+import videoseal.utils.dist as udist
+       
 
 name2aug = {
     'rotate': Rotate,
@@ -99,6 +102,28 @@ class Augmenter(nn.Module):
             is_video=True
         )
         self.num_augs = num_augs
+
+    def update_rotation_range(self, max_angle: float):
+       """
+       Update the rotation range for progressive training.
+       
+       Args:
+           max_angle: New maximum rotation angle (degrees)
+       """
+       # Update rotation range for both image and video augmentations
+       for aug in self.augs:
+           if isinstance(aug, Rotate):
+               aug.min_angle = -int(max_angle)
+               aug.max_angle = int(max_angle)
+               
+       for aug in self.augs_video:
+           if isinstance(aug, Rotate):
+               aug.min_angle = -int(max_angle)
+               aug.max_angle = int(max_angle)
+       
+       # Log only in main process
+       if udist.is_main_process():
+           print(f"  [Rotation] Updated to ±{max_angle:.1f}°")
 
     def parse_augmentations(
         self,

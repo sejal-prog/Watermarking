@@ -1,3 +1,13 @@
+# Datasets and large files
+large_experiments/
+logs/
+*.jpg
+*.png
+*.json
+*.ckpt
+*.safetensors
+
+# Existing rules
 __pycache__
 output*
 core
@@ -5,8 +15,6 @@ core*
 *egg-info
 *.pth
 *.mp4
-
-# Track videos in test directories
 !**/tests/**/*.mp4
 results*
 slurm*
