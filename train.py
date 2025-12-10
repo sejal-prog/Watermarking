@@ -34,17 +34,6 @@ Examples:
         --scaling_w_schedule None --scaling_w 0.2 --scaling_i 1.0 --attenuation jnd_1_1 \
         --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
         --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs.yaml --disc_in_channels 1 --disc_start 50
-
-Sejal - 
-for progressive training - 
-OMP_NUM_THREADS=40 torchrun --nproc_per_node=2 train.py --local_rank 0 \
-    --video_dataset none --image_dataset sa-1b-full-resized --workers 8 \
-    --extractor_model convnext_tiny --embedder_model unet_small2_yuv_quant --hidden_size_multiplier 1 --nbits 128 \
-    --scaling_w_schedule Cosine,scaling_min=0.2,start_epoch=200,epochs=200 --scaling_w 1.0 --scaling_i 1.0 --attenuation jnd_1_1 \
-    --epochs 601 --iter_per_epoch 1000 --scheduler CosineLRScheduler,lr_min=1e-6,t_initial=601,warmup_lr_init=1e-8,warmup_t=20 --optimizer AdamW,lr=5e-4 \
-    --lambda_dec 10.0 --lambda_d 0.01 --lambda_i 0.01 --perceptual_loss yuv --num_augs 2 --augmentation_config configs/all_augs.yaml --disc_in_channels 1 --disc_start 50
-
-changes loss weights - --lambda_dec 10.0 --lambda_d 0.01 --lambda_i 0.01
 """
 
 import argparse
@@ -81,7 +70,6 @@ from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
 from videoseal.utils.tensorboard import CustomTensorboardWriter
-from rotation_scheduler import RotationScheduler
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -286,16 +274,6 @@ def main(params):
         **augmenter_cfg,
     )
     print(f'augmenter: {augmenter}')
-    # Progressive rotation scheduler for curriculum learning
-    rotation_scheduler = RotationScheduler(
-        start_angle=10,              # Start easy
-        end_angle=45,                # Your thesis target
-        start_epoch=0,
-        end_epoch=params.epochs,     # Gradually increase over all epochs
-        schedule_type='linear'       # Options: 'linear', 'cosine', 'step'
-    )
-    if udist.is_main_process():
-        print(rotation_scheduler.get_schedule_info(params.epochs))
 
     # Build the extractor model
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
@@ -510,12 +488,6 @@ def main(params):
     print('training...')
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
-        current_rotation_angle = rotation_scheduler.get_rotation_range(epoch)
-        augmenter.update_rotation_range(current_rotation_angle)
-       
-       # Log to tensorboard
-        if udist.is_main_process():
-            tensorboard.add_scalar('augmentation/rotation_angle', current_rotation_angle, epoch)
 
         # prepare modality and select loader
         epoch_modality = modalities[epoch]
