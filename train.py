@@ -777,7 +777,8 @@ def eval_one_epoch(
             msgs = outputs["msgs"].to(device)  # b k
             imgs_w = outputs["imgs_w"]  # b c h w
 
-            if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
+            #if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
+            if (epoch > 0 and epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
                 base_name = os.path.join(
                     params.output_dir, f'{epoch:03}_{acc_it*it:03}_{epoch_modality}_val')
                 ori_path = base_name + '_0_ori.png'

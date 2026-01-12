@@ -20,6 +20,24 @@ python -m videoseal.evals.full \
     --lowres_attenuation True --scaling_w 0.2 \
     --dataset sa-v --is_video true --num_samples 1 --save_first 1
 
+
+
+ python -m videoseal.evals.full  \
+    --checkpoint output/checkpoint200.pth \
+    --lowres_attenuation True \
+    --scaling_w 0.2\
+    --dataset sa-v \
+    --is_video true    \
+    --num_samples 160   \
+    --save_first 5  \
+    --short_edge_size 256  \
+    --num_frames 8  \
+    --videoseal_chunk_size 8 \
+    --videoseal_step_size 4  \
+    --img_size_proc 256   \
+    --only_identity false  \
+    --output_dir outputs/videos
+
 3/ Evaluate a baseline. Use the checkpoint path as the method name
 
 --checkpoint baseline/wam

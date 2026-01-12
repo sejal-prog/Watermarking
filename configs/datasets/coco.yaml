@@ -1,4 +1,4 @@
-train_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/coco/val2017
-val_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/coco/val2017
+train_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/coco/val2017_fil
+val_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/coco/val2017_fil
 train_annotation_file: null
 val_annotation_file: null

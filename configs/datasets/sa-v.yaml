@@ -1,0 +1,5 @@
+train_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/sav/train/
+val_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/sav/val/
+eval_dir: /home/sejal/Documents/Thesis/videoseal/large_experiments/omniseal/sav/eval/
+train_annotation_file: null
+val_annotation_file: null
