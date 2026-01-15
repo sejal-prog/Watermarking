@@ -23,6 +23,7 @@ def jpeg_compress(image: torch.Tensor, quality: int) -> torch.Tensor:
     """
     assert image.min() >= 0 and image.max(
     ) <= 1, f'Image pixel values must be in the range [0, 1], got [{image.min()}, {image.max()}]'
+    # image = torch.clamp(image, 0.0, 1.0)
     pil_image = transforms.ToPILImage()(image)  # convert to PIL image
     # Create a BytesIO object and save the PIL image as JPEG to this object
     buffer = io.BytesIO()

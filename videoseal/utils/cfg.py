@@ -285,8 +285,8 @@ def setup_dataset(args):
                 output_resolution = args.short_edge_size,
                 num_workers = 0,
                 subsample_frames = True,
-                frames_per_clip = 8,      # ← Add this
-                frame_step = 4,           # ← Add this
+                frames_per_clip = 8,      
+                frame_step = 4,          
                 num_clips = 1,
             )
         print(f"Video dataset loaded from {dataset_config.val_dir}")

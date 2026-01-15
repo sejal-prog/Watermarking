@@ -70,6 +70,8 @@ from videoseal.utils.data import Modalities, parse_dataset_params
 from videoseal.utils.display import save_vid
 from videoseal.utils.image import create_diff_img
 from videoseal.utils.tensorboard import CustomTensorboardWriter
+from rotation_scheduler import ProgressiveRotationScheduler
+from torch.amp import autocast
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -274,6 +276,23 @@ def main(params):
         **augmenter_cfg,
     )
     print(f'augmenter: {augmenter}')
+
+    # Progressive rotation scheduler for curriculum learning
+    rotation_scheduler = ProgressiveRotationScheduler(
+        max_epochs=params.epochs,   # Total epochs (600)
+        use_replay=True             # Enable experience replay!
+    )
+    if udist.is_main_process():
+        print("="*80)
+        print("ROTATION SCHEDULER INITIALIZED")
+        print("="*80)
+        print(f"Max epochs: {params.epochs}")
+        print(f"Experience replay: {'ENABLED' if rotation_scheduler.use_replay else 'DISABLED'}")
+        print("\nTraining phases:")
+        print("  Phase 1 (0-199):   100% on 10-15° (learn basics)")
+        print("  Phase 2 (200-399): 70% on 20-30° + 30% replay 10-15°")
+        print("  Phase 3 (400-600): 50% on 35-45° + 30% replay 10-15° + 20% replay 20-30°")
+        print("="*80)
 
     # Build the extractor model
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
