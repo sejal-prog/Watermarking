@@ -11,6 +11,7 @@ from ..modules.msg_processor import MsgProcessor
 from ..modules.unet import UNetMsg
 from ..modules.vae import VAEDecoder, VAEEncoder
 from ..modules.dvmark import DVMarkEncoder
+from ..modules.unet_gcnn import build_unet_gcnn
 
 
 class Embedder(nn.Module):
@@ -252,6 +253,18 @@ def build_embedder(name, cfg, nbits, hidden_size_multiplier=2):
         msg_processor = MsgProcessor(**cfg.msg_processor)
         decoder = VAEDecoder(**cfg.decoder)
         embedder = VAEEmbedder(encoder, decoder, msg_processor)
+    
+    elif name.startswith('unet_gcnn'):
+        # updates some cfg
+        cfg.msg_processor.nbits = nbits
+        cfg.msg_processor.hidden_size = hidden_size
+        # build the msg processor and GCNN unet
+        msg_processor = MsgProcessor(**cfg.msg_processor)
+        unet = build_unet_gcnn(
+            msg_processor=msg_processor,
+            **cfg.unet)
+        embedder = UnetEmbedder(unet, msg_processor)
+        
     elif name.startswith('unet'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits

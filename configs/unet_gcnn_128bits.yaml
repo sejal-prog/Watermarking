@@ -1,0 +1,62 @@
+# GCNN U-Net Configuration for 128-bit watermarking
+
+name: unet_gcnn_128bits
+
+# Message settings
+nbits: 128
+hidden_size_multiplier: 2  # hidden_size = 128 * 2 = 256
+
+# Message processor
+msg_processor:
+  nbits: 128  # will be set by build_embedder
+  hidden_size: 256  # will be set by build_embedder
+  msg_processor_type: "binary+concat"
+  msg_mult: 1.0
+
+# GCNN U-Net settings
+unet:
+  in_channels: 3
+  out_channels: 3
+  z_channels: 64  # Base channels
+  num_blocks: 2  # Bottleneck depth
+  z_channels_mults: [1, 2, 4, 8]  # → 64, 128, 256, 512
+  last_tanh: true
+  zero_init: false
+
+# Training settings
+training:
+  batch_size: 8  # Reduced due to 4× memory from GCNN
+  learning_rate: 1.0e-5
+  epochs: 1100
+  
+  # Image pre-training
+  image_pretrain_epochs: 800
+  
+  # Video post-training
+  video_start_epoch: 800
+  video_epochs: 300
+  
+  # Extractor fine-tuning
+  finetune_extractor_start: 1050
+  freeze_embedder: true
+
+# Loss weights
+loss:
+  lambda_w: 1.0  # Message loss
+  lambda_i: 0.5  # Image MSE loss
+  lambda_disc: 0.1  # Discriminator loss
+
+# Augmentation
+augmentation:
+  use_geometric: true  # Important for rotation testing!
+  use_valuemetric: true
+  use_compression: true
+  
+  geometric:
+    - rotation: [-10, 10]  # degrees - Keeping this same as regular ,rely on equivariance. 
+    - crop: [0.7, 1.0]  # ratio
+    - perspective: [0.1, 0.5]
+  
+  compression:
+    - h264: [9, 27]  # CRF range
+    - jpeg: [40, 80]  # Quality range
