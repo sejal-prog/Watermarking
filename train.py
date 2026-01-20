@@ -34,7 +34,37 @@ Examples:
         --scaling_w_schedule None --scaling_w 0.2 --scaling_i 1.0 --attenuation jnd_1_1 \
         --epochs 601 --iter_per_epoch 100 --scheduler None --optimizer AdamW,lr=1e-5 \
         --lambda_dec 1.0 --lambda_d 0.5 --lambda_i 0.1 --perceptual_loss yuv  --num_augs 2 --augmentation_config configs/all_augs.yaml --disc_in_channels 1 --disc_start 50
-"""
+
+    python train.py   
+        --image_dataset sa-1b 
+        --video_dataset sa-v 
+        --prop_img_vid 0.5   
+      --video_start 601    
+     --workers 4    
+     --frames_per_clip 16   
+  --videoseal_step_size 4   
+      --lowres_attenuation True 
+              --img_size_proc 256  
+                    --img_size_val 256  
+           --img_size 512    
+         --batch_size 16   
+             --batch_size_video 1   
+                 --extractor_model convnext_tiny  
+                       --embedder_model unet_small2_yuv_quant 
+                               --hidden_size_multiplier 1   
+      --nbits 128  
+         
+               --scaling_w 0.2  
+                     --scaling_i 1.0  
+                           --attenuation jnd_1_1  
+                                 --epochs 801   
+                                     --iter_per_epoch 100  
+                                           --saveimg_freq 99999   
+                                               --optimizer AdamW,lr=1e-5   
+                                                   --lambda_dec 1.0     --lambda_d 0.5     --lambda_i 0.1     --perceptual_loss yuv     --num_augs 2     --augmentation_config configs/all_augs.yaml     --disc_in_channels 1     --disc_start 50     --resume_from /home/sejal/Documents/Thesis/videoseal/ckpts/videoseal_og_smaller_dt/output/checkpoint600.pth     --resume_optimizer_state True     --resume_disc True
+    
+        
+        """
 
 import argparse
 import datetime
