@@ -11,6 +11,7 @@ from escnn import gspaces, nn as gnn
 # Initialize the rotation group (p4)
 # This is the group of 90° rotations + translations
 R2_ACT = gspaces.rot2dOnR2(N=4)
+# rotation on 2d onto 2d plane. with 4 types of rotation (0°,90°,180°,270°)
 
 
 def get_trivial_field_type(n_channels: int):
@@ -51,10 +52,9 @@ class GResnetBlock(gnn.EquivariantModule):
     ):
         super().__init__()
         
-        # Use out_type for middle layer to keep things simple
+        # renamed out_type for middle layer to keep things simple
         mid_type = out_type
         
-        # Double convolution path
         self.conv1 = gnn.R2Conv(in_type, mid_type, kernel_size=3, padding=1, bias=False)
         self.norm1 = gnn.InnerBatchNorm(mid_type)
         self.act1 = gnn.ReLU(mid_type, inplace=True)

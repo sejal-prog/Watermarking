@@ -62,17 +62,13 @@ class UNetMsgGCNN(nn.Module):
         self.last_tanh = last_tanh
         self.connect_scale = 2 ** -0.5
         
-        # Calculate channel dimensions
         z_channels_list = [z_channels * m for m in z_channels_mults]
         
-        # Create field types
         self.in_type = get_trivial_field_type(in_channels)  # Z2 (regular image)
         self.out_type = get_trivial_field_type(out_channels)  # Z2 (regular image)
-        
-        # Hidden layer types (p4 - with rotations)
+  
         self.hidden_types = [get_regular_field_type(c) for c in z_channels_list]
         
-        # ============ ENCODER ============
         
         # Initial lifting layer (Z2 → p4)
         self.inc = GResnetBlock(
@@ -90,8 +86,6 @@ class UNetMsgGCNN(nn.Module):
                 )
             )
         
-        # ============ BOTTLENECK ============
-        
         # After message injection, channels increase
         bottleneck_channels = z_channels_list[-1] + self.msg_processor.hidden_size
         self.bottleneck_type = get_regular_field_type(bottleneck_channels)
@@ -100,8 +94,6 @@ class UNetMsgGCNN(nn.Module):
             num_blocks=num_blocks,
             field_type=self.bottleneck_type,
         )
-        
-        # ============ DECODER ============
         
         # Upsampling layers (p4 → p4)
         self.ups = nn.ModuleList()
@@ -119,7 +111,6 @@ class UNetMsgGCNN(nn.Module):
                 GUBlock(up_in_type, up_out_type)
             )
         
-        # ============ OUTPUT ============
         
         # Final projection layer (p4 → Z2)
         self.outc = gnn.R2Conv(
@@ -149,7 +140,6 @@ class UNetMsgGCNN(nn.Module):
         # Wrap input as GeometricTensor (Z2)
         x = wrap_tensor(imgs, self.in_type)
         
-        # ============ ENCODER ============
         
         # Initial convolution (Z2 → p4)
         x = self.inc(x)  # [B, 64*4, H, W] in tensor form
@@ -159,8 +149,6 @@ class UNetMsgGCNN(nn.Module):
         for down in self.downs:
             x = down(hiddens[-1])
             hiddens.append(x)
-        
-        # ============ MESSAGE INJECTION ============
         
         # Unwrap to regular tensor
         x_tensor = unwrap_tensor(hiddens.pop())  # [B, 512*4, H, W]
@@ -191,11 +179,9 @@ class UNetMsgGCNN(nn.Module):
         x = wrap_tensor(x_with_msg, self.bottleneck_type)
         hiddens.append(x)
         
-        # ============ BOTTLENECK ============
-        
+        # BOTTLENECK 
         x = self.bottleneck(hiddens[-1])
         
-        # ============ DECODER ============
         
         # Upsampling with skip connections
         for up in self.ups:
@@ -217,7 +203,6 @@ class UNetMsgGCNN(nn.Module):
             # Upsample
             x = up(x)
         
-        # ============ OUTPUT ============
         
         # Project to Z2 (average over rotations)
         logits = self.outc(x)
