@@ -73,13 +73,6 @@ from videoseal.utils.tensorboard import CustomTensorboardWriter
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-def print_gpu_memory(stage=""):
-    """Helper to monitor GPU memory usage"""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated() / 1024**3
-        reserved = torch.cuda.memory_reserved() / 1024**3
-        print(f"[{stage}] GPU Memory: Allocated={allocated:.2f}GB, Reserved={reserved:.2f}GB")
-
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -160,8 +153,6 @@ def get_parser():
        help="Scheduler (default: None)")
     aa('--epochs', default=600, type=int,
        help='Number of total epochs to run')
-    aa('--gradient_accumulation_steps', default=1, type=int,
-       help='Number of batches to accumulate gradients over before updating weights')
     aa('--iter_per_epoch', default=10000, type=int,
        help='Number of iterations per epoch, made for very large datasets')
     aa('--sleepwake', type=utils.bool_inst, default=False,
@@ -598,17 +589,9 @@ def train_one_epoch(
     header = f'Train - Epoch: [{epoch}/{params.epochs}] - Modality: {epoch_modality}'
     metric_logger = ulogger.MetricLogger(delimiter="  ")
 
-    # for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
-    #     if it >= params.iter_per_epoch:
-    #         break
-    accum_iter = 0
-
     for it, batch_items in enumerate(metric_logger.log_every(train_loader, 10, header)):
         if it >= params.iter_per_epoch:
             break
-
-        if it % 10 == 0:
-            print_gpu_memory(f"Epoch {epoch}, Iter {it}")
 
         # some data loaders return batch_data, masks, frames_positions as well
         batch_imgs, batch_masks = batch_items[0], batch_items[1]
@@ -631,11 +614,8 @@ def train_one_epoch(
                 optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
-        # for optimizer_idx in optimizer_ids_for_epoch:
-        #     optimizers[optimizer_idx].zero_grad()
-        if accum_iter == 0:
-            for optimizer_idx in optimizer_ids_for_epoch:
-                optimizers[optimizer_idx].zero_grad()
+        for optimizer_idx in optimizer_ids_for_epoch:
+            optimizers[optimizer_idx].zero_grad()
 
         # accumulate gradients
         for acc_it in range(accumulation_steps):
@@ -695,31 +675,6 @@ def train_one_epoch(
             for name, value in log_stats.items():
                 metric_logger.update(**{name: value})
 
-            # # save images on training
-            # if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
-            # # if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
-            #     ori_path = os.path.join(
-            #         params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_0_ori.png')
-            #     wm_path = os.path.join(
-            #         params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_1_wm.png')
-            #     diff_path = os.path.join(
-            #         params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_2_diff.png')
-            #     aug_path = os.path.join(
-            #         params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_3_aug_{outputs["selected_aug"]}.png')
-            #     if udist.is_main_process():
-            #         save_image(imgs, ori_path, nrow=8)
-            #         tensorboard.add_images("TRAIN/IMAGES/orig", imgs, epoch)
-            #         save_image(outputs["imgs_w"], wm_path, nrow=8)
-            #         tensorboard.add_images(
-            #             "TRAIN/IMAGES/wmed", outputs["imgs_w"], epoch)
-            #         save_image(create_diff_img(
-            #             imgs, outputs["imgs_w"]), diff_path, nrow=8)
-            #         tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
-            #             imgs, outputs["imgs_w"]), epoch)
-            #         save_image(outputs["imgs_aug"], aug_path, nrow=8)
-            #         tensorboard.add_images(
-            #             "TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
-
             # save images on training
             if (epoch % params.saveimg_freq == 0) and it == acc_it == 0:
             # if (epoch % params.saveimg_freq == 0) and (it % 50) == 0:
@@ -732,34 +687,18 @@ def train_one_epoch(
                 aug_path = os.path.join(
                     params.output_dir, f'{epoch:03}_{it:03}_{epoch_modality}_train_3_aug_{outputs["selected_aug"]}.png')
                 if udist.is_main_process():
-                    save_image(imgs.detach(), ori_path, nrow=8)  # ADDED .detach()
-                    tensorboard.add_images("TRAIN/IMAGES/orig", imgs.detach(), epoch)  # ADDED .detach()
-                    save_image(outputs["imgs_w"].detach(), wm_path, nrow=8)  # ADDED .detach()
+                    save_image(imgs, ori_path, nrow=8)
+                    tensorboard.add_images("TRAIN/IMAGES/orig", imgs, epoch)
+                    save_image(outputs["imgs_w"], wm_path, nrow=8)
                     tensorboard.add_images(
-                        "TRAIN/IMAGES/wmed", outputs["imgs_w"].detach(), epoch)  # ADDED .detach()
+                        "TRAIN/IMAGES/wmed", outputs["imgs_w"], epoch)
                     save_image(create_diff_img(
-                        imgs.detach(), outputs["imgs_w"].detach()), diff_path, nrow=8)  # ADDED .detach()
+                        imgs, outputs["imgs_w"]), diff_path, nrow=8)
                     tensorboard.add_images("TRAIN/IMAGES/diff", create_diff_img(
-                        imgs.detach(), outputs["imgs_w"].detach()), epoch)  #  ADDED .detach()
-                    save_image(outputs["imgs_aug"].detach(), aug_path, nrow=8)  # ADDED .detach()
+                        imgs, outputs["imgs_w"]), epoch)
+                    save_image(outputs["imgs_aug"], aug_path, nrow=8)
                     tensorboard.add_images(
-                        "TRAIN/IMAGES/aug", outputs["imgs_aug"].detach(), epoch)  #  ADDED .detach()
-                    
-            del outputs, imgs, masks, loss
-            if 'bit_preds' in locals():
-                del bit_preds
-            if 'mask_preds' in locals():
-                del mask_preds
-
-        accum_iter += 1
-        if accum_iter >= params.gradient_accumulation_steps:
-            # end accumulate gradients batches
-            # add optimizer step
-            for optimizer_idx in optimizer_ids_for_epoch:
-                optimizers[optimizer_idx].step()
-            accum_iter = 0
-
-        torch.cuda.empty_cache()
+                        "TRAIN/IMAGES/aug", outputs["imgs_aug"], epoch)
 
         # end accumulate gradients batches
         # add optimizer step
@@ -835,28 +774,8 @@ def eval_one_epoch(
             embed_time = time.time()
             outputs = wam.embed(imgs, is_video=is_video, lowres_attenuation=params.lowres_attenuation)
             embed_time = (time.time() - embed_time) / imgs.shape[0]
-            # msgs = outputs["msgs"].to(device)  # b k
-            # imgs_w = outputs["imgs_w"]  # b c h w
-            msgs = outputs["msgs"].to(device).clone()  #  ADDED .clone()
-            imgs_w = outputs["imgs_w"].clone()  #  ADDED .clone()
-            del outputs
-
-            #if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
-            # if (epoch > 0 and epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
-            #     base_name = os.path.join(
-            #         params.output_dir, f'{epoch:03}_{acc_it*it:03}_{epoch_modality}_val')
-            #     ori_path = base_name + '_0_ori.png'
-            #     wm_path = base_name + '_1_wm.png'
-            #     diff_path = base_name + '_2_diff.png'
-            #     save_image(imgs, ori_path, nrow=8)
-            #     save_image(imgs_w, wm_path, nrow=8)
-            #     save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
-            #     tensorboard.add_images(
-            #         "VALID/IMAGES/orig", imgs, acc_it*it*epoch)
-            #     tensorboard.add_images(
-            #         "VALID/IMAGES/wmed", imgs_w, acc_it*it*epoch)
-            #     tensorboard.add_images(
-            #         "VALID/IMAGES/diff", create_diff_img(imgs, imgs_w), acc_it*it*epoch)
+            msgs = outputs["msgs"].to(device)  # b k
+            imgs_w = outputs["imgs_w"]  # b c h w
 
             #if (epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
             if (epoch > 0 and epoch % params.saveimg_freq == 0) and it == acc_it == 0 and udist.is_main_process():
@@ -865,45 +784,30 @@ def eval_one_epoch(
                 ori_path = base_name + '_0_ori.png'
                 wm_path = base_name + '_1_wm.png'
                 diff_path = base_name + '_2_diff.png'
-                save_image(imgs.detach(), ori_path, nrow=8)  # ADDED .detach()
-                save_image(imgs_w.detach(), wm_path, nrow=8)  #  ADDED .detach()
-                save_image(create_diff_img(imgs.detach(), imgs_w.detach()), diff_path, nrow=8)  #  ADDED .detach()
+                save_image(imgs, ori_path, nrow=8)
+                save_image(imgs_w, wm_path, nrow=8)
+                save_image(create_diff_img(imgs, imgs_w), diff_path, nrow=8)
                 tensorboard.add_images(
-                    "VALID/IMAGES/orig", imgs.detach(), acc_it*it*epoch)  #  ADDED .detach()
+                    "VALID/IMAGES/orig", imgs, acc_it*it*epoch)
                 tensorboard.add_images(
-                    "VALID/IMAGES/wmed", imgs_w.detach(), acc_it*it*epoch)  # ADDED .detach()
+                    "VALID/IMAGES/wmed", imgs_w, acc_it*it*epoch)
                 tensorboard.add_images(
-                    "VALID/IMAGES/diff", create_diff_img(imgs.detach(), imgs_w.detach()), acc_it*it*epoch)  #  ADDED .detach()
-
-                # if epoch_modality == Modalities.VIDEO:
-                #     fps = 24 // 1
-                #     ori_path = ori_path.replace(".png", ".mp4")
-                #     wm_path = wm_path.replace(".png", ".mp4")
-                #     diff_path = diff_path.replace(".png", ".mp4")
-                #     save_vid(imgs, ori_path, fps)
-                #     save_vid(imgs_w, wm_path, fps)
-                #     save_vid(create_diff_img(imgs, imgs_w), diff_path, fps)
-                #     tensorboard.add_video(
-                #         "VALID/VIDEOS/orig", imgs.unsqueeze(0), acc_it*it*epoch, fps)
-                #     tensorboard.add_video(
-                #         "VALID/VIDEOS/wmed", imgs_w.unsqueeze(0), acc_it*it*epoch, fps)
-                #     tensorboard.add_video(
-                #         "VALID/VIDEOS/diff", create_diff_img(imgs, imgs_w).unsqueeze(0), acc_it*it*epoch, fps)
+                    "VALID/IMAGES/diff", create_diff_img(imgs, imgs_w), acc_it*it*epoch)
 
                 if epoch_modality == Modalities.VIDEO:
                     fps = 24 // 1
                     ori_path = ori_path.replace(".png", ".mp4")
                     wm_path = wm_path.replace(".png", ".mp4")
                     diff_path = diff_path.replace(".png", ".mp4")
-                    save_vid(imgs.detach(), ori_path, fps)  #  ADDED .detach()
-                    save_vid(imgs_w.detach(), wm_path, fps)  # ADDED .detach()
-                    save_vid(create_diff_img(imgs.detach(), imgs_w.detach()), diff_path, fps)  # ADDED .detach()
+                    save_vid(imgs, ori_path, fps)
+                    save_vid(imgs_w, wm_path, fps)
+                    save_vid(create_diff_img(imgs, imgs_w), diff_path, fps)
                     tensorboard.add_video(
-                        "VALID/VIDEOS/orig", imgs.detach().unsqueeze(0), acc_it*it*epoch, fps)  #  ADDED .detach()
+                        "VALID/VIDEOS/orig", imgs.unsqueeze(0), acc_it*it*epoch, fps)
                     tensorboard.add_video(
-                        "VALID/VIDEOS/wmed", imgs_w.detach().unsqueeze(0), acc_it*it*epoch, fps)  # ADDED .detach()
+                        "VALID/VIDEOS/wmed", imgs_w.unsqueeze(0), acc_it*it*epoch, fps)
                     tensorboard.add_video(
-                        "VALID/VIDEOS/diff", create_diff_img(imgs.detach(), imgs_w.detach()).unsqueeze(0), acc_it*it*epoch, fps)  # ADDED .detach()
+                        "VALID/VIDEOS/diff", create_diff_img(imgs, imgs_w).unsqueeze(0), acc_it*it*epoch, fps)
 
             # quality metrics
             metrics = {}
@@ -935,9 +839,7 @@ def eval_one_epoch(
                         outputs = wam.detect(imgs_aug, is_video=is_video)
                         extract_time = time.time() - extract_time
                         extract_times.append(extract_time / imgs_aug.shape[0])
-                        preds = outputs["preds"].clone()  # ADDED .clone()
-                        del outputs  # ADDED .clone()
-                        #preds = outputs["preds"]
+                        preds = outputs["preds"]
                         mask_preds = preds[:, 0:1]  # b 1 ...
                         bit_preds = preds[:, 1:]  # b k ...
 
@@ -968,8 +870,6 @@ def eval_one_epoch(
 
                         torch.cuda.synchronize()
                         metric_logger.update(**aug_log_stats)
-
-                        del imgs_aug, masks_aug, preds, mask_preds, bit_preds
 
             metrics['extract_time'] = np.mean(extract_times)
             torch.cuda.synchronize()

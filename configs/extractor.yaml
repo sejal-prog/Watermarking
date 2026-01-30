@@ -90,3 +90,15 @@ convnext_base_pw:
     nbits: 16
     sigmoid_output: False
     pixelwise: True
+
+convnext_gcnn:
+  encoder:
+    in_channels: 3
+    z_channels: 32
+    z_channels_mults: [1, 2, 4, 8]
+  pixel_decoder:
+    pixelwise: False
+    upscale_stages: [1]
+    embed_dim: 256
+    nbits: 128
+    sigmoid_output: False

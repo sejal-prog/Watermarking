@@ -145,8 +145,25 @@ class UnetEmbedder(Embedder):
     def get_random_msg(self, bsz: int = 1, nb_repetitions=1) -> torch.Tensor:
         return self.msg_processor.get_random_msg(bsz, nb_repetitions)  # b x k
 
+    # def get_last_layer(self) -> torch.Tensor:
+    #     last_layer = self.unet.outc.weight
+    #     return last_layer
+
     def get_last_layer(self) -> torch.Tensor:
-        last_layer = self.unet.outc.weight
+    # Handle both regular UNet and GCNN UNet
+        if hasattr(self.unet, 'outc'):
+            # Regular UNet
+            outc = self.unet.outc
+            if hasattr(outc, 'weights'):
+                last_layer = outc.weights
+            elif hasattr(outc, 'weight'):
+                last_layer = outc.weight
+        elif hasattr(self.unet, 'final_conv'):
+            # GCNN UNet - final_conv is a single Conv2d layer
+            last_layer = self.unet.final_conv.weight  # ✅ No indexing
+        else:
+            raise AttributeError("UNet has neither 'outc' nor 'final_conv'")
+        
         return last_layer
 
     def forward(

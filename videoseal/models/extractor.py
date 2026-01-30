@@ -11,6 +11,8 @@ from ..modules.hidden import HiddenDecoder
 from ..modules.pixel_decoder import PixelDecoder
 from ..modules.vit import ImageEncoderViT
 from ..modules.dvmark import DVMarkDecoder
+from ..modules.extractor_gcnn import GCNNEncoder, GCNNExtractor
+
 
 
 class Extractor(nn.Module):
@@ -35,6 +37,34 @@ class Extractor(nn.Module):
         """
         return ...
 
+class GCNNConvnextExtractor(Extractor):
+    """
+    GCNN-based extractor for rotation-robust watermark detection.
+    """
+
+    def __init__(
+        self,
+        gcnn_convnext: nn.Module,
+        pixel_decoder: PixelDecoder,
+    ) -> None:
+        super(GCNNConvnextExtractor, self).__init__()
+        self.gcnn_convnext = gcnn_convnext
+        self.pixel_decoder = pixel_decoder
+
+    def forward(
+        self,
+        imgs: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Args:
+            imgs: (torch.Tensor) Batched images [B, C, H, W]
+        Returns:
+            masks: (torch.Tensor) Predictions [B, 1+nbits, H, W]
+        """
+        imgs = self.preprocess(imgs)  # [-1, 1]
+        latents = self.gcnn_convnext(imgs)  # [B, C*4, H, W] in p4 format
+        masks = self.pixel_decoder(latents)  # Pools rotations internally
+        return masks
 
 class SegmentationExtractor(Extractor):
     """
@@ -184,6 +214,11 @@ def build_extractor(name, cfg, img_size, nbits):
         # build the encoder, decoder and msg processor
         hidden_decoder = HiddenDecoder(**cfg)
         extractor = HiddenExtractor(hidden_decoder)
+    elif name.startswith('convnext_gcnn'):
+        cfg.pixel_decoder.nbits = nbits
+        gcnn_encoder = GCNNEncoder(**cfg.encoder)
+        pixel_decoder = PixelDecoder(**cfg.pixel_decoder)
+        extractor = GCNNExtractor(gcnn_encoder, pixel_decoder)
     elif name.startswith('convnext'):
         # updates some cfg
         cfg.pixel_decoder.nbits = nbits
@@ -195,4 +230,5 @@ def build_extractor(name, cfg, img_size, nbits):
         extractor = DVMarkDecoder(nbits)
     else:
         raise NotImplementedError(f"Model {name} not implemented")
+    
     return extractor
