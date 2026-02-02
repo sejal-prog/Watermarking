@@ -252,6 +252,9 @@ def build_embedder(name, cfg, nbits, hidden_size_multiplier=2):
         msg_processor = MsgProcessor(**cfg.msg_processor)
         decoder = VAEDecoder(**cfg.decoder)
         embedder = VAEEmbedder(encoder, decoder, msg_processor)
+    elif name.endswith('_gcnn'):
+        from .g_builders import build_g_embedder
+        return build_g_embedder(cfg, nbits, hidden_size_multiplier)
     elif name.startswith('unet'):
         # updates some cfg
         cfg.msg_processor.nbits = nbits

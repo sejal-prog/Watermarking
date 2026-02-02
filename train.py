@@ -103,6 +103,9 @@ def get_parser():
         help="Number of epochs before starting video training")
     aa("--finetune_detector_start", type=int, default=1e6,
        help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
+    
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                    help='Number of gradient accumulation steps')
 
     group = parser.add_argument_group('Experiments parameters')
     aa("--output_dir", type=str, default="output/",
@@ -642,8 +645,11 @@ def train_one_epoch(
                 optimizer_ids_for_epoch = [1, 0]
 
         # reset the optimizer gradients before accum gradients
-        for optimizer_idx in optimizer_ids_for_epoch:
-            optimizers[optimizer_idx].zero_grad()
+        # for optimizer_idx in optimizer_ids_for_epoch:
+        #     optimizers[optimizer_idx].zero_grad()
+        if it % params.gradient_accumulation_steps == 0:
+            for optimizer_idx in optimizer_ids_for_epoch:
+                optimizers[optimizer_idx].zero_grad()
 
         # accumulate gradients
         for acc_it in range(accumulation_steps):
@@ -659,6 +665,7 @@ def train_one_epoch(
             last_layer = wam.embedder.get_last_layer() if not params.distributed else wam.module.embedder.get_last_layer()
 
             # index 1 for discriminator, 0 for embedder/extractor
+            
             for optimizer_idx in optimizer_ids_for_epoch:
                 loss, logs = image_detection_loss(
                     imgs, outputs["imgs_w"],
@@ -667,6 +674,7 @@ def train_one_epoch(
                     last_layer=last_layer,
                 )
                 # Scale loss for accumulation so lr is not affected
+                total_accumulation = accumulation_steps * params.gradient_accumulation_steps
                 loss = loss / accumulation_steps
                 loss.backward()
 
@@ -730,8 +738,12 @@ def train_one_epoch(
 
         # end accumulate gradients batches
         # add optimizer step
-        for optimizer_idx in optimizer_ids_for_epoch:
-            optimizers[optimizer_idx].step()
+        if (it + 1) % params.gradient_accumulation_steps == 0:
+            for optimizer_idx in optimizer_ids_for_epoch:
+                optimizers[optimizer_idx].step()
+                optimizers[optimizer_idx].zero_grad()
+        # for optimizer_idx in optimizer_ids_for_epoch:
+        #     optimizers[optimizer_idx].step()
 
     metric_logger.synchronize_between_processes()
     print("Averaged {} stats:".format('train'), metric_logger)
