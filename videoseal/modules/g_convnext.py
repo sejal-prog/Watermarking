@@ -5,13 +5,14 @@
 
 # Group Equivariant ConvNeXt-style backbone for watermark extraction
 # Uses C4 rotation group by default
+# FIXED: Pixelwise prediction like VideoSeal instead of global pooling
 
 import torch
 import torch.nn as nn
 from escnn import gspaces
 from escnn import nn as enn
 
-from .g_common import get_gspace, GResnetBlock
+from .g_common import get_gspace
 
 
 class GConvNeXtBlock(nn.Module):
@@ -36,18 +37,14 @@ class GConvNeXtBlock(nn.Module):
         mid_type = enn.FieldType(gspace, mid_channels * [gspace.regular_repr])
         
         self.block = enn.SequentialModule(
-            # Depthwise-style conv (groups not directly supported, use regular conv)
             enn.R2Conv(in_type, in_type, kernel_size=7, padding=3, bias=False),
             enn.InnerBatchNorm(in_type),
-            # Pointwise expansion
             enn.R2Conv(in_type, mid_type, kernel_size=1, bias=False),
             enn.ReLU(mid_type, inplace=True),
-            # Pointwise projection
             enn.R2Conv(mid_type, out_type, kernel_size=1, bias=False),
             enn.InnerBatchNorm(out_type),
         )
         
-        # Skip connection
         if in_type != out_type:
             self.skip = enn.R2Conv(in_type, out_type, kernel_size=1, bias=False)
         else:
@@ -63,7 +60,6 @@ class GConvNeXtBlock(nn.Module):
         if self.skip is not None:
             residual = self.skip(residual)
         
-        # Add residual
         out = enn.GeometricTensor(out.tensor + residual.tensor, self.out_type)
         return self.act(out)
 
@@ -82,10 +78,6 @@ class GConvNeXtStage(nn.Module):
     ):
         super().__init__()
         
-        gspace = in_type.gspace
-        
-        # Downsampling layer
-        # Note: escnn requires kernel_size >= 3 for proper basis, use pooling + conv instead
         if downsample:
             self.downsample = enn.SequentialModule(
                 enn.PointwiseAvgPool(in_type, kernel_size=2, stride=2),
@@ -98,7 +90,6 @@ class GConvNeXtStage(nn.Module):
             else:
                 self.downsample = None
         
-        # Blocks
         blocks = []
         for _ in range(num_blocks):
             blocks.append(GConvNeXtBlock(out_type, out_type))
@@ -120,19 +111,14 @@ class GConvNeXtExtractor(nn.Module):
     """
     Group Equivariant ConvNeXt-style backbone for watermark extraction.
     
+    FIXED: Uses pixelwise prediction like VideoSeal instead of global pooling.
+    
     Architecture:
         1. Lift RGB to group space
         2. Multiple stages with G-Conv blocks and downsampling
-        3. Global spatial pooling
-        4. Group pooling (average over rotations) → Invariant features
-        5. FC head → message bits
-    
-    Args:
-        in_channels: Input channels (3 for RGB)
-        nbits: Number of message bits to extract
-        depths: Number of blocks at each stage
-        dims: Channel dimensions at each stage
-        group_type: Rotation group ("C4", "C8", "D4")
+        3. Group pooling (average over rotations) → Invariant features
+        4. 1x1 Conv → Pixelwise predictions [B, nbits, H, W]
+        5. Spatial average → Final predictions [B, nbits]
     """
     
     def __init__(
@@ -153,8 +139,7 @@ class GConvNeXtExtractor(nn.Module):
         self.in_type = enn.FieldType(self.gspace, in_channels * [self.gspace.trivial_repr])
         self.first_type = enn.FieldType(self.gspace, dims[0] * [self.gspace.regular_repr])
         
-        # Stem: patch embedding style
-        # Note: escnn needs kernel_size >= 3, use pooling + conv instead of stride-4 conv
+        # Stem: lift and initial downsample
         self.stem = enn.SequentialModule(
             enn.R2Conv(self.in_type, self.first_type, kernel_size=3, padding=1, bias=False),
             enn.InnerBatchNorm(self.first_type),
@@ -164,7 +149,6 @@ class GConvNeXtExtractor(nn.Module):
         
         # === STAGES ===
         self.stages = nn.ModuleList()
-        self.stage_types = [self.first_type]
         
         for i in range(len(depths)):
             in_dim = dims[i-1] if i > 0 else dims[0]
@@ -173,7 +157,6 @@ class GConvNeXtExtractor(nn.Module):
             in_type = enn.FieldType(self.gspace, in_dim * [self.gspace.regular_repr])
             out_type = enn.FieldType(self.gspace, out_dim * [self.gspace.regular_repr])
             
-            # First stage doesn't downsample (stem already did 4x)
             downsample = (i > 0)
             
             stage = GConvNeXtStage(
@@ -183,22 +166,19 @@ class GConvNeXtExtractor(nn.Module):
                 downsample=downsample,
             )
             self.stages.append(stage)
-            self.stage_types.append(out_type)
         
-        # === POOLING ===
-        # Final type after all stages
+        # === GROUP POOLING ===
         self.final_type = enn.FieldType(self.gspace, dims[-1] * [self.gspace.regular_repr])
-        
-        # Group pooling: average over group dimension → invariant features
         self.group_pool = enn.GroupPooling(self.final_type)
         
-        # === FC HEAD ===
-        # After group pooling: [B, dims[-1], H, W] 
-        # After spatial pooling: [B, dims[-1]]
-        self.fc = nn.Sequential(
-            nn.Linear(dims[-1], dims[-1]),
+        # === PIXELWISE HEAD (like VideoSeal) ===
+        # After group pooling: [B, dims[-1], H, W]
+        # Predict at each pixel, then average
+        self.pixel_head = nn.Sequential(
+            nn.Conv2d(dims[-1], dims[-1], kernel_size=1, bias=False),
+            nn.BatchNorm2d(dims[-1]),
             nn.ReLU(inplace=True),
-            nn.Linear(dims[-1], nbits),
+            nn.Conv2d(dims[-1], nbits, kernel_size=1, bias=True),
         )
     
     def forward(self, imgs: torch.Tensor) -> torch.Tensor:
@@ -219,16 +199,15 @@ class GConvNeXtExtractor(nn.Module):
         for stage in self.stages:
             x = stage(x)
         
-        # === POOLING ===
-        # Group pooling first (average over rotations)
+        # === GROUP POOLING (rotation invariance) ===
         x = self.group_pool(x)  # [B, C*G, H, W] -> [B, C, H, W]
+        x = x.tensor  # Extract tensor
         
-        # Extract tensor and do spatial global average pooling
-        x = x.tensor  # [B, C, H, W]
-        x = x.mean(dim=[-2, -1])  # [B, C]
+        # === PIXELWISE PREDICTION ===
+        x = self.pixel_head(x)  # [B, nbits, H, W]
         
-        # === FC HEAD ===
-        logits = self.fc(x)  # [B, nbits]
+        # === SPATIAL AVERAGE ===
+        logits = x.mean(dim=[-2, -1])  # [B, nbits]
         
         return logits
 

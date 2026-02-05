@@ -64,3 +64,17 @@ unet_tiny_yuv_quant:
     normalization: 'batch'
     z_channels_mults: [1, 1, 2, 4]
     last_tanh: True
+
+unet_gcnn:
+  group_type: C4
+  msg_processor:
+    nbits: 8
+    hidden_size: 32
+    msg_processor_type: 'binary+concat'
+  unet:
+    in_channels: 3
+    out_channels: 3
+    z_channels: 16
+    z_channels_mults: [1, 2, 4, 8]
+    num_blocks: 8
+    last_tanh: True

@@ -36,10 +36,7 @@ class GConvnextExtractor(nn.Module):
         self.preprocess = lambda x: x * 2 - 1  # [0,1] -> [-1,1]
         self.nbits = g_convnext.nbits
     
-    def forward(
-        self,
-        imgs: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, imgs: torch.Tensor) -> torch.Tensor:
         """
         Extract watermark message from images.
         
@@ -47,16 +44,21 @@ class GConvnextExtractor(nn.Module):
             imgs: Input images [B, 3, H, W] in range [0, 1]
         
         Returns:
-            Message logits [B, nbits]
-            (Apply sigmoid + threshold 0.5 to get binary bits)
+            Predictions [B, 1+nbits] - first is detection, rest are message bits
         """
         # Preprocess to [-1, 1]
         imgs = self.preprocess(imgs)
         
         # Extract message
-        logits = self.g_convnext(imgs)
+        logits = self.g_convnext(imgs)  # [B, nbits]
         
-        return logits
+        # Add detection channel (always 1 = watermarked)
+        batch_size = logits.shape[0]
+        detection = torch.ones(batch_size, 1, device=logits.device)
+        
+        output = torch.cat([detection, logits], dim=1)  # [B, 1+nbits]
+        
+        return output
     
     def decode_message(self, logits: torch.Tensor) -> torch.Tensor:
         """

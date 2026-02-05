@@ -1,145 +1,275 @@
-#!/usr/bin/env python3
 """
-Test script to verify progressive rotation implementation.
-Run this before starting full training to check everything works.
+DIRECT COMPARISON: VideoSeal Original vs G-CNN
 
-Usage:
-    python test_progressive_rotation.py
+Find exactly which component fails:
+1. VideoSeal embedder + VideoSeal extractor (baseline - should work)
+2. VideoSeal embedder + G-CNN extractor (test extractor)
+3. G-CNN embedder + VideoSeal extractor (test embedder)  
+4. G-CNN embedder + G-CNN extractor (our full system)
+
+Run: python test_compare.py
 """
 
-import sys
 import torch
+import torch.nn.functional as F
+from torch.optim import AdamW
+from torchvision import transforms
+from PIL import Image
+import sys, os, glob, random
+import omegaconf
 
-print("="*80)
-print("Testing Progressive Rotation Implementation")
-print("="*80)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Test 1: Import rotation scheduler
-print("\n1. Testing rotation_scheduler.py import...")
-try:
-    from rotation_scheduler import RotationScheduler
-    print("   ✅ rotation_scheduler.py imported successfully")
-except ImportError as e:
-    print(f"   ❌ Failed to import rotation_scheduler: {e}")
-    print("   → Make sure rotation_scheduler.py is in your project root")
-    sys.exit(1)
+# G-CNN imports
+from videoseal.models.g_embedder import GUnetEmbedder
+from videoseal.models.g_extractor import build_g_extractor
+from videoseal.modules.g_unet import GUNetMsg
+from videoseal.modules.g_msg_processor import GMsgProcessor
+from videoseal.modules.g_common import get_gspace
 
-# Test 2: Create scheduler
-print("\n2. Testing RotationScheduler initialization...")
-try:
-    scheduler = RotationScheduler(
-        start_angle=10,
-        end_angle=45,
-        start_epoch=0,
-        end_epoch=600,
-        schedule_type='linear'
-    )
-    print("   ✅ Scheduler created successfully")
-except Exception as e:
-    print(f"   ❌ Failed to create scheduler: {e}")
-    sys.exit(1)
+# VideoSeal original imports
+from videoseal.models.embedder import build_embedder
+from videoseal.models.extractor import build_extractor
 
-# Test 3: Test schedule function
-print("\n3. Testing schedule at key epochs...")
-test_epochs = [0, 150, 300, 450, 600]
-expected_angles = [10.0, 18.75, 27.5, 36.25, 45.0]
 
-all_correct = True
-for epoch, expected in zip(test_epochs, expected_angles):
-    actual = scheduler.get_rotation_range(epoch)
-    match = abs(actual - expected) < 0.1
-    status = "✅" if match else "❌"
-    print(f"   {status} Epoch {epoch:3d}: {actual:5.2f}° (expected {expected:5.2f}°)")
-    if not match:
-        all_correct = False
+def build_gcnn_embedder(nbits=8):
+    gspace = get_gspace('C4')
+    msg_processor = GMsgProcessor(nbits=nbits, hidden_size=nbits*2, group_order=4, msg_processor_type='binary+concat')
+    gunet = GUNetMsg(msg_processor=msg_processor, in_channels=3, out_channels=3, z_channels=32, z_channels_mults=(1,2), num_blocks=1, group_type='C4')
+    return GUnetEmbedder(gunet, msg_processor)
 
-if not all_correct:
-    print("   ⚠️  Schedule values don't match expected - check implementation")
-else:
-    print("   ✅ All schedule values correct")
 
-# Test 4: Test augmenter modification
-print("\n4. Testing Augmenter.update_rotation_range()...")
-try:
-    sys.path.insert(0, 'videoseal/augmentation')
-    from videoseal.augmentation.augmenter import Augmenter
-    from videoseal.augmentation.geometric import Rotate
+def build_gcnn_extractor(nbits=8):
+    return build_g_extractor(nbits=nbits, depths=[2,2,2], dims=[32,64,128], group_type='C4')
+
+
+def build_videoseal_embedder(nbits=8):
+    """Build original VideoSeal UNet embedder"""
+    cfg = omegaconf.OmegaConf.load('configs/embedder.yaml')
+    model_cfg = cfg['unet_small2_quant']
+    return build_embedder('unet_small2_quant', model_cfg, nbits, hidden_size_multiplier=2)
+
+
+def build_videoseal_extractor(nbits=8):
+    """Build original VideoSeal ConvNeXt extractor"""
+    cfg = omegaconf.OmegaConf.load('configs/extractor.yaml')
+    model_cfg = cfg['convnext_tiny']
+    return build_extractor('convnext_tiny', model_cfg, img_size=128, nbits=nbits)
+
+
+class ImageLoader:
+    def __init__(self, image_dir, img_size=128):
+        self.transform = transforms.Compose([transforms.Resize((img_size, img_size)), transforms.ToTensor()])
+        self.paths = glob.glob(os.path.join(image_dir, '**/*.jpg'), recursive=True)[:500]
+        print(f"  Loaded {len(self.paths)} images")
     
-    # Create a simple augmenter with rotation
-    augmenter = Augmenter(
-        masks={'kind': None},
-        augs={'rotate': 1, 'identity': 1},
-        augs_params={'rotate': {'min_angle': -10, 'max_angle': 10, 'do90': False}},
-        num_augs=1
-    )
+    def get_batch(self, bs, device):
+        imgs = []
+        for p in random.sample(self.paths, bs):
+            try:
+                imgs.append(self.transform(Image.open(p).convert('RGB')))
+            except:
+                imgs.append(torch.rand(3, 128, 128))
+        return torch.stack(imgs).to(device)
+
+
+def train_and_eval(embedder, extractor, loader, device, name, num_iters=3000):
+    """Train embedder+extractor pair and return final accuracy"""
+    print(f"\n{'='*60}")
+    print(f" {name}")
+    print(f"{'='*60}")
     
-    # Check if update method exists
-    if not hasattr(augmenter, 'update_rotation_range'):
-        print("   ❌ Augmenter doesn't have update_rotation_range() method")
-        print("   → Add the method to videoseal/augmentation/augmenter.py")
-        sys.exit(1)
+    embedder = embedder.to(device)
+    extractor = extractor.to(device)
     
-    print("   ✅ Augmenter has update_rotation_range() method")
+    embedder_params = sum(p.numel() for p in embedder.parameters())
+    extractor_params = sum(p.numel() for p in extractor.parameters())
+    print(f"  Embedder: {embedder_params:,} params")
+    print(f"  Extractor: {extractor_params:,} params")
     
-    # Test updating rotation
-    augmenter.update_rotation_range(25.0)
+    embedder.train()
+    extractor.train()
     
-    # Check if rotation was actually updated
-    rotation_updated = False
-    for aug in augmenter.augs:
-        if isinstance(aug, Rotate):
-            if aug.max_angle == 25:
-                rotation_updated = True
-                print(f"   ✅ Rotation range updated successfully: ±{aug.max_angle}°")
-            else:
-                print(f"   ❌ Rotation range not updated correctly: {aug.min_angle} to {aug.max_angle}")
+    optimizer = AdamW([
+        {'params': embedder.parameters(), 'lr': 5e-4},
+        {'params': extractor.parameters(), 'lr': 1e-3},
+    ])
     
-    if not rotation_updated:
-        print("   ⚠️  Could not verify rotation update")
+    nbits = 8
+    best_acc = 0
+    
+    for it in range(num_iters):
+        optimizer.zero_grad()
         
-except ImportError as e:
-    print(f"   ⚠️  Could not test augmenter: {e}")
-    print("   → This is OK if you haven't added the method yet")
-    print("   → Remember to add update_rotation_range() to Augmenter class")
-except Exception as e:
-    print(f"   ⚠️  Error testing augmenter: {e}")
+        imgs = loader.get_batch(8, device)
+        msgs = embedder.get_random_msg(8).float().to(device)
+        
+        # Forward through embedder
+        imgs_w = embedder(imgs, msgs)
+        
+        # Normalize to [0,1] for extractor if needed
+        if imgs_w.min() < 0:  # Output is [-1,1]
+            imgs_w_norm = (imgs_w + 1) / 2
+        else:
+            imgs_w_norm = imgs_w
+        imgs_w_norm = torch.clamp(imgs_w_norm, 0, 1)
+        
+        # Forward through extractor
+        preds = extractor(imgs_w_norm)
+        
+        # Handle different output formats
+        if preds.dim() == 4:  # [B, C, H, W] - pixelwise
+            preds = preds.mean(dim=[-2, -1])  # [B, C]
+        
+        if preds.shape[1] == nbits + 1:  # Has detection channel
+            bit_preds = preds[:, 1:]
+        else:
+            bit_preds = preds
+        
+        # Loss
+        decode_loss = F.binary_cross_entropy_with_logits(bit_preds, msgs)
+        img_loss = F.mse_loss(imgs_w_norm, imgs)
+        loss = decode_loss + 0.1 * img_loss
+        
+        loss.backward()
+        optimizer.step()
+        
+        with torch.no_grad():
+            acc = ((torch.sigmoid(bit_preds) > 0.5).float() == msgs).float().mean().item()
+            best_acc = max(best_acc, acc)
+        
+        if (it + 1) % 500 == 0:
+            print(f"  Iter {it+1:5d} | Loss: {loss.item():.4f} | Acc: {acc*100:.1f}% | Best: {best_acc*100:.1f}%")
+    
+    # Final eval
+    embedder.eval()
+    extractor.eval()
+    
+    accs = []
+    with torch.no_grad():
+        for _ in range(30):
+            imgs = loader.get_batch(8, device)
+            msgs = embedder.get_random_msg(8).float().to(device)
+            imgs_w = embedder(imgs, msgs)
+            if imgs_w.min() < 0:
+                imgs_w_norm = (imgs_w + 1) / 2
+            else:
+                imgs_w_norm = imgs_w
+            imgs_w_norm = torch.clamp(imgs_w_norm, 0, 1)
+            preds = extractor(imgs_w_norm)
+            if preds.dim() == 4:
+                preds = preds.mean(dim=[-2, -1])
+            if preds.shape[1] == nbits + 1:
+                bit_preds = preds[:, 1:]
+            else:
+                bit_preds = preds
+            accs.append(((torch.sigmoid(bit_preds) > 0.5).float() == msgs).float().mean().item())
+    
+    final = sum(accs) / len(accs)
+    print(f"\n  FINAL: {final*100:.1f}% | Best: {best_acc*100:.1f}%")
+    
+    return final, best_acc
 
-# Test 5: Simulate training loop
-print("\n5. Simulating training loop...")
-try:
-    print("   Epoch  | Rotation Range")
-    print("   " + "-"*30)
-    for epoch in range(0, 601, 50):
-        angle = scheduler.get_rotation_range(epoch)
-        print(f"   {epoch:4d}   | ±{angle:5.2f}°")
-    print("   ✅ Training loop simulation successful")
-except Exception as e:
-    print(f"   ❌ Error in simulation: {e}")
 
-# Test 6: Test different schedule types
-print("\n6. Testing different schedule types...")
-schedule_types = ['linear', 'cosine', 'step', 'exponential']
-try:
-    for stype in schedule_types:
-        s = RotationScheduler(10, 45, 0, 600, stype)
-        angle_0 = s.get_rotation_range(0)
-        angle_300 = s.get_rotation_range(300)
-        angle_600 = s.get_rotation_range(600)
-        print(f"   ✅ {stype:12s}: {angle_0:5.1f}° → {angle_300:5.1f}° → {angle_600:5.1f}°")
-except Exception as e:
-    print(f"   ❌ Error testing schedule types: {e}")
+def main():
+    print("=" * 60)
+    print(" COMPARISON: VideoSeal vs G-CNN Components")
+    print("=" * 60)
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"\nDevice: {device}")
+    
+    loader = ImageLoader("large_experiments/omniseal/sa-1b/train")
+    
+    results = {}
+    
+    # Test 1: VideoSeal + VideoSeal (baseline)
+    try:
+        emb = build_videoseal_embedder(8)
+        ext = build_videoseal_extractor(8)
+        final, best = train_and_eval(emb, ext, loader, device, "VideoSeal Embedder + VideoSeal Extractor", 3000)
+        results["VS+VS"] = (final, best)
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        results["VS+VS"] = (0, 0)
+    
+    # Test 2: VideoSeal embedder + G-CNN extractor
+    try:
+        emb = build_videoseal_embedder(8)
+        ext = build_gcnn_extractor(8)
+        final, best = train_and_eval(emb, ext, loader, device, "VideoSeal Embedder + G-CNN Extractor", 3000)
+        results["VS+GCNN"] = (final, best)
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        results["VS+GCNN"] = (0, 0)
+    
+    # Test 3: G-CNN embedder + VideoSeal extractor
+    try:
+        emb = build_gcnn_embedder(8)
+        ext = build_videoseal_extractor(8)
+        final, best = train_and_eval(emb, ext, loader, device, "G-CNN Embedder + VideoSeal Extractor", 3000)
+        results["GCNN+VS"] = (final, best)
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        results["GCNN+VS"] = (0, 0)
+    
+    # Test 4: G-CNN + G-CNN
+    try:
+        emb = build_gcnn_embedder(8)
+        ext = build_gcnn_extractor(8)
+        final, best = train_and_eval(emb, ext, loader, device, "G-CNN Embedder + G-CNN Extractor", 3000)
+        results["GCNN+GCNN"] = (final, best)
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        results["GCNN+GCNN"] = (0, 0)
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print(" SUMMARY")
+    print("=" * 60)
+    print(f"\n  {'Combination':<35} {'Final':<10} {'Best':<10}")
+    print("-" * 55)
+    for name, (final, best) in results.items():
+        status = "✓" if final > 0.85 else "○" if final > 0.70 else "✗"
+        print(f"  {name:<35} {final*100:>6.1f}%    {best*100:>6.1f}%  {status}")
+    
+    # Analysis
+    print("\n" + "=" * 60)
+    print(" ANALYSIS")
+    print("=" * 60)
+    
+    vs_vs = results.get("VS+VS", (0,0))[0]
+    vs_gcnn = results.get("VS+GCNN", (0,0))[0]
+    gcnn_vs = results.get("GCNN+VS", (0,0))[0]
+    gcnn_gcnn = results.get("GCNN+GCNN", (0,0))[0]
+    
+    if vs_vs > 0.85:
+        print(f"\n  ✓ VideoSeal baseline works: {vs_vs*100:.1f}%")
+    
+    if vs_gcnn > 0.85:
+        print(f"  ✓ G-CNN extractor works with VS embedder: {vs_gcnn*100:.1f}%")
+        print("    → G-CNN extractor is OK")
+    elif vs_gcnn < gcnn_gcnn:
+        print(f"  ✗ G-CNN extractor fails with VS embedder: {vs_gcnn*100:.1f}%")
+        print("    → G-CNN EXTRACTOR is the problem")
+    
+    if gcnn_vs > 0.85:
+        print(f"  ✓ G-CNN embedder works with VS extractor: {gcnn_vs*100:.1f}%")
+        print("    → G-CNN embedder is OK")
+    elif gcnn_vs < gcnn_gcnn:
+        print(f"  ✗ G-CNN embedder fails with VS extractor: {gcnn_vs*100:.1f}%")
+        print("    → G-CNN EMBEDDER is the problem")
+    
+    if gcnn_gcnn < 0.70:
+        if gcnn_vs > gcnn_gcnn and vs_gcnn > gcnn_gcnn:
+            print(f"\n  → BOTH G-CNN components have issues")
+        elif gcnn_vs < vs_vs * 0.8:
+            print(f"\n  → G-CNN EMBEDDER is the main problem")
+        elif vs_gcnn < vs_vs * 0.8:
+            print(f"\n  → G-CNN EXTRACTOR is the main problem")
+    
+    print("=" * 60)
 
-# Summary
-print("\n" + "="*80)
-print("SUMMARY")
-print("="*80)
-print("\nIf all tests passed (✅), you're ready to train!")
-print("\nTo start training with progressive rotation:")
-print("  1. Make sure rotation_scheduler.py is in your project root")
-print("  2. Add update_rotation_range() to Augmenter class")
-print("  3. Modify train.py as shown in COMPLETE_IMPLEMENTATION_GUIDE.md")
-print("  4. Run your training command")
-print("\nExpected results after 600 epochs:")
-print("  - bit_acc @ 45° rotation: 70-75% (vs 50% baseline)")
-print("\nGood luck! 🚀")
-print("="*80)
+
+if __name__ == "__main__":
+    main()

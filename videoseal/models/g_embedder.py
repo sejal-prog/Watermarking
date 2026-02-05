@@ -69,31 +69,22 @@ class GUnetEmbedder(nn.Module):
         return imgs_w
 
 
-def build_g_embedder(
-    nbits: int = 32,
-    hidden_size_multiplier: int = 2,
-    z_channels: int = 64,
-    z_channels_mults: tuple = (1, 2, 4),
-    num_blocks: int = 2,
-    group_type: str = "C4",
-):
+def build_g_embedder(cfg, nbits, hidden_size_multiplier=2):
     """
     Build a complete Group Equivariant Embedder.
     
     Args:
+        cfg: OmegaConf config with unet and msg_processor sections
         nbits: Number of message bits
         hidden_size_multiplier: Multiplier for hidden size
-        z_channels: Base feature channels
-        z_channels_mults: Channel multipliers for each level
-        num_blocks: Number of bottleneck blocks
-        group_type: Rotation group ("C4", "C8", "D4")
     
     Returns:
         GUnetEmbedder model
     """
     hidden_size = int(nbits * hidden_size_multiplier)
     
-    # Get group order for message processor
+    # Get group info
+    group_type = cfg.get('group_type', 'C4')
     gspace = get_gspace(group_type)
     group_order = gspace.fibergroup.order()
     
@@ -101,14 +92,16 @@ def build_g_embedder(
         nbits=nbits,
         hidden_size=hidden_size,
         group_order=group_order,
-        msg_processor_type="binary+concat",
+        msg_processor_type=cfg.msg_processor.get('msg_processor_type', 'binary+concat'),
     )
     
     gunet = GUNetMsg(
         msg_processor=msg_processor,
-        z_channels=z_channels,
-        z_channels_mults=z_channels_mults,
-        num_blocks=num_blocks,
+        in_channels=cfg.unet.get('in_channels', 3),
+        out_channels=cfg.unet.get('out_channels', 3),
+        z_channels=cfg.unet.get('z_channels', 32),
+        z_channels_mults=tuple(cfg.unet.get('z_channels_mults', [1, 2])),
+        num_blocks=cfg.unet.get('num_blocks', 1),
         group_type=group_type,
     )
     
