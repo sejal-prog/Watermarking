@@ -193,6 +193,14 @@ def build_extractor(name, cfg, img_size, nbits):
         extractor = ConvnextExtractor(convnext, pixel_decoder)
     elif name.startswith("dvmark"):
         extractor = DVMarkDecoder(nbits)
+    elif name.startswith('g_convnext'):
+        from .g_extractor import build_g_extractor
+        extractor = build_g_extractor(
+            nbits=nbits,
+            depths=list(cfg.encoder.depths),
+            dims=list(cfg.encoder.dims),
+            group_type=cfg.get('group_type', 'C4'),
+        )
     else:
         raise NotImplementedError(f"Model {name} not implemented")
     return extractor
