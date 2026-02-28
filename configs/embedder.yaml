@@ -66,7 +66,7 @@ unet_tiny_yuv_quant:
     last_tanh: True
 
 unet_gcnn:
-  group_type: C4
+  group_type: C8
   msg_processor:
     nbits: 8
     hidden_size: 32

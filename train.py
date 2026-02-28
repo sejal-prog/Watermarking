@@ -103,6 +103,8 @@ def get_parser():
         help="Number of epochs before starting video training")
     aa("--finetune_detector_start", type=int, default=1e6,
        help="Number of epochs afterwhich the generator is frozen and detector is finetuned")
+    aa('--use_curriculum', type=utils.bool_inst, default=True,
+       help='If True, use progressive rotation curriculum learning')
     
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                     help='Number of gradient accumulation steps')
@@ -290,15 +292,20 @@ def main(params):
     )
     print(f'augmenter: {augmenter}')
     # Progressive rotation scheduler for curriculum learning
-    rotation_scheduler = RotationScheduler(
-        start_angle=10,              # Start easy
-        end_angle=45,                # Your thesis target
-        start_epoch=0,
-        end_epoch=params.epochs,     # Gradually increase over all epochs
-        schedule_type='linear'       # Options: 'linear', 'cosine', 'step'
-    )
-    if udist.is_main_process():
-        print(rotation_scheduler.get_schedule_info(params.epochs))
+    if params.use_curriculum:
+        rotation_scheduler = RotationScheduler(
+            start_angle=10,
+            end_angle=45,
+            start_epoch=0,
+            end_epoch=params.epochs,
+            schedule_type='linear'
+        )
+        if udist.is_main_process():
+            print(rotation_scheduler.get_schedule_info(params.epochs))
+    else:
+        rotation_scheduler = None
+        if udist.is_main_process():
+            print("Curriculum learning DISABLED - using fixed rotation angles from config")
 
     # Build the extractor model
     extractor_cfg = omegaconf.OmegaConf.load(params.extractor_config)
@@ -513,12 +520,11 @@ def main(params):
     print('training...')
     start_time = time.time()
     for epoch in range(start_epoch, params.epochs):
-        current_rotation_angle = rotation_scheduler.get_rotation_range(epoch)
-        augmenter.update_rotation_range(current_rotation_angle)
-       
-       # Log to tensorboard
-        if udist.is_main_process():
-            tensorboard.add_scalar('augmentation/rotation_angle', current_rotation_angle, epoch)
+        if rotation_scheduler is not None:
+            current_rotation_angle = rotation_scheduler.get_rotation_range(epoch)
+            augmenter.update_rotation_range(current_rotation_angle)
+            if udist.is_main_process():
+                tensorboard.add_scalar('augmentation/rotation_angle', current_rotation_angle, epoch)
 
         # prepare modality and select loader
         epoch_modality = modalities[epoch]
