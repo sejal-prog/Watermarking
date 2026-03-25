@@ -78,17 +78,17 @@ def get_validation_augs(
         augs = [
             (Identity(),          [0]),  # No parameters needed for identity
             (HorizontalFlip(),    [0]),  # No parameters needed for flip
-            (Rotate(),            [10, 90]),  # (min_angle, max_angle)
-            (Resize(),            [0.55, 0.71]),  # size ratio
-            (Crop(),              [0.55, 0.71]),  # size ratio
-            (Perspective(),       [0.5]),  # distortion_scale
-            (Brightness(),        [0.5, 1.5]),
-            (Contrast(),          [0.5, 1.5]),
+            (Rotate(),            [5, 10, 30, 45, 90]),  # (min_angle, max_angle)
+            (Resize(),            [0.32, 0.45, 0.55, 0.63, 0.71, 0.77, 0.84, 0.89, 0.95, 1.00]),  # size ratio
+            (Crop(),              [0.32, 0.45, 0.55, 0.63, 0.71, 0.77, 0.84, 0.89, 0.95, 1.00]),  # size ratio
+            (Perspective(),       [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),  # distortion_scale
+            (Brightness(),        [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
+            (Contrast(),          [00.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]),
             (Saturation(),        [0.5, 1.5]),
-            (Hue(),               [0.25]),
+            (Hue(),               [-0.4, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5]),
             (Grayscale(),         [-1]),  # No parameters needed for grayscale
-            (JPEG(),              [40]),
-            (GaussianBlur(),      [9]),
+            (JPEG(),              [40, 50, 60, 70, 80, 90]),
+            (GaussianBlur(),      [3, 5, 9, 13, 17]),
             (H264(),              [23, 30, 40, 50]),
             (H264rgb(),           [23, 30, 40, 50]),
             (H265(),              [23, 30, 40, 50]),  # crf > 50 is not valid
