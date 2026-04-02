@@ -90,3 +90,5 @@ convnext_base_pw:
     nbits: 16
     sigmoid_output: False
     pixelwise: True
+
+    
