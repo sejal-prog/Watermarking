@@ -28,8 +28,7 @@ Original Image → [Embedder] → Watermarked → [ROTATION ATTACK] → [Extract
 
 | Model | PSNR | Identity | Rotate 30° | Rotate 45° | Rotate 90° |
 |-------|------|----------|------------|------------|------------|
-| **VideoSeal Baseline** | 44.6 dB | 66.1% | 51.5% | 50.3% | 62.9% |
-      (22K SA-1B)
+| **VideoSeal Baseline (22K SA-1B)** | 44.6 dB | 66.1% | 51.5% | 50.3% | 62.9% |
 | **G-ConvNeXt C4** | 44.4 dB | 69.6% | 61.2% | 54.6% | 69.4% |
 | **G-ConvNeXt C8** | 44.2 dB | 68.4% | 59.7% | 54.3% | 68.1% |
 
