@@ -2,6 +2,10 @@
 # This module extends Meta's VideoSeal (https://github.com/facebookresearch/videoseal)
 # with group-equivariant CNN support for rotation-invariant watermarking.
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class RotationScheduler:
     """
     Progressive rotation augmentation scheduler for curriculum learning.
@@ -35,12 +39,10 @@ class RotationScheduler:
         assert end_angle >= start_angle, "end_angle must be >= start_angle"
         assert end_epoch > start_epoch, "end_epoch must be > start_epoch"
         
-        print(f"\n{'='*60}")
-        print(f"RotationScheduler initialized:")
-        print(f"  Schedule type: {schedule_type}")
-        print(f"  Angle range: {start_angle}° → {end_angle}°")
-        print(f"  Epoch range: {start_epoch} → {end_epoch}")
-        print(f"{'='*60}\n")
+        logger.info(
+            "RotationScheduler initialized: type=%s, angles=%s°→%s°, epochs=%s→%s",
+            schedule_type, start_angle, end_angle, start_epoch, end_epoch,
+        )
     
     def get_rotation_range(self, epoch: int) -> float:
         """
@@ -114,14 +116,15 @@ class RotationScheduler:
 
 
 if __name__ == "__main__":
-    # Test the scheduler
-    scheduler = RotationScheduler(start_angle=10, end_angle=45, 
-                                 start_epoch=0, end_epoch=600, 
-                                 schedule_type='linear')
-    print(scheduler.get_schedule_info(600))
-    
-    # Test at specific epochs
-    test_epochs = [0, 150, 300, 450, 600]
-    for epoch in test_epochs:
+    logging.basicConfig(level=logging.INFO)
+
+    scheduler = RotationScheduler(
+        start_angle=10, end_angle=45,
+        start_epoch=0, end_epoch=600,
+        schedule_type="linear",
+    )
+    logger.info("\n%s", scheduler.get_schedule_info(600))
+
+    for epoch in [0, 150, 300, 450, 600]:
         angle = scheduler.get_rotation_range(epoch)
-        print(f"Epoch {epoch}: ±{angle:.2f}°")
+        logger.info("Epoch %d: ±%.2f°", epoch, angle)

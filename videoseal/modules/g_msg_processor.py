@@ -9,7 +9,9 @@
 import torch
 import torch.nn as nn
 from escnn import nn as enn
+import logging
 
+logger = logging.getLogger(__name__)
 
 class GMsgProcessor(nn.Module):
     """
@@ -125,8 +127,8 @@ class GMsgProcessor(nn.Module):
         # Now: ch0,ch0,ch0,ch0, ch1,ch1,ch1,ch1, ... (each channel repeated G times)
         
         if verbose:
-            print(f"Latent shape: {latent_tensor.shape}")
-            print(f"Message shape after replication: {msg_aux.shape}")
+            logger.debug("Latent shape: %s", latent_tensor.shape)
+            logger.debug("Message shape after replication: %s", msg_aux.shape)
         
         # Apply message to latents
         if self.msg_agg == "concat":
