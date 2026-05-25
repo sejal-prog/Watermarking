@@ -7,6 +7,16 @@ logs/
 *.ckpt
 *.safetensors
 
+# Accidentally committed binaries
+*.whl
+/omegaconf
+/torch
+
+# Backup files
+*.backup
+*.bak
+*.orig
+
 # Existing rules
 __pycache__
 output*
