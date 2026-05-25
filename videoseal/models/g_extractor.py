@@ -1,7 +1,7 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
+# Copyright (c) Sejal Jadhav. Licensed under the MIT License.
+# This module extends Meta's VideoSeal (https://github.com/facebookresearch/videoseal)
+# with group-equivariant CNN support for rotation-invariant watermarking.
+
 
 # Group Equivariant Extractor Wrapper
 # Drop-in replacement for ConvnextExtractor

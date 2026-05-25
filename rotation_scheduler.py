@@ -1,6 +1,6 @@
-
-import math
-
+# Copyright (c) Sejal Jadhav. Licensed under the MIT License.
+# This module extends Meta's VideoSeal (https://github.com/facebookresearch/videoseal)
+# with group-equivariant CNN support for rotation-invariant watermarking.
 
 class RotationScheduler:
     """
