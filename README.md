@@ -184,7 +184,7 @@ If you use this work, please cite:
   title={Rotation-Invariant Video Watermarking using Group-Equivariant CNNs},
   author={Sejal},
   year={2026},
-  school={Your University}
+  school={University of Freiburg}
 }
 
 @article{fernandez2024video,
